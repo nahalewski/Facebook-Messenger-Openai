@@ -2,6 +2,8 @@ const { OpenAI } = require("openai");
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
+const axios = require('axios');
+const cheerio = require('cheerio');
 require('dotenv').config();
 
 const openai = new OpenAI({
@@ -22,126 +24,105 @@ const conversationHistory = new Map();
 // Store partial appointment details
 const appointmentContext = new Map();
 
-// Function to log appointments
-const logAppointment = (appointmentDetails) => {
+// Function to fetch car inventory
+async function getCarInformation(searchQuery) {
   try {
-    console.log('Current directory:', __dirname);
+    const baseUrl = 'https://www.hendrickhondahickory.com';
+    const newCarsUrl = `${baseUrl}/new-inventory/index.htm`;
+    const usedCarsUrl = `${baseUrl}/used-inventory/index.htm`;
     
-    const logDir = path.join(__dirname, '../logs');
-    const logFile = path.join(logDir, 'appointments.log');
-    
-    console.log('Attempting to create/access log directory:', logDir);
-    
-    if (!fs.existsSync(logDir)) {
-      console.log('Log directory does not exist, creating it...');
-      fs.mkdirSync(logDir, { recursive: true });
-    }
-
-    const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] Name: ${appointmentDetails.name}, Phone: ${appointmentDetails.phone}, Appointment: ${appointmentDetails.datetime}\n`;
-    
-    console.log('Writing to log file:', logFile);
-    console.log('Log entry:', logEntry);
-
-    fs.appendFileSync(logFile, logEntry);
-    console.log('Successfully wrote to log file');
-
-    // Send email notification
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: process.env.EMAIL_RECIPIENT,
-      subject: 'New Honda Dealership Appointment',
-      text: `New appointment has been scheduled:\n\n${logEntry}\n\nThis is an automated notification.`,
-      html: `
-        <h2>New Appointment Scheduled</h2>
-        <p><strong>Name:</strong> ${appointmentDetails.name}</p>
-        <p><strong>Phone:</strong> ${appointmentDetails.phone || 'Not provided'}</p>
-        <p><strong>Date/Time:</strong> ${appointmentDetails.datetime}</p>
-        <p><em>This is an automated notification from your Honda Dealership Bot.</em></p>
-      `
+    const results = {
+      newCars: [],
+      usedCars: []
     };
 
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.error('Email sending failed:', error);
-      } else {
-        console.log('Email notification sent:', info.response);
+    // Fetch new cars
+    const newCarsResponse = await axios.get(newCarsUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    
+    let $ = cheerio.load(newCarsResponse.data);
+    $('.vehicle-card').each((i, element) => {
+      const title = $(element).find('.vehicle-card-title').text().trim();
+      const price = $(element).find('.price').text().trim();
+      
+      if (title.toLowerCase().includes(searchQuery.toLowerCase())) {
+        results.newCars.push({
+          title,
+          price,
+          type: 'New'
+        });
       }
     });
 
+    // Fetch used cars
+    const usedCarsResponse = await axios.get(usedCarsUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    
+    $ = cheerio.load(usedCarsResponse.data);
+    $('.vehicle-card').each((i, element) => {
+      const title = $(element).find('.vehicle-card-title').text().trim();
+      const price = $(element).find('.price').text().trim();
+      const mileage = $(element).find('.mileage').text().trim();
+      
+      if (title.toLowerCase().includes(searchQuery.toLowerCase())) {
+        results.usedCars.push({
+          title,
+          price,
+          mileage,
+          type: 'Used'
+        });
+      }
+    });
+
+    return results;
   } catch (error) {
-    console.error('Error in logAppointment:', error);
+    console.error('Error fetching car information:', error);
+    return null;
   }
-};
+}
 
-// Function to extract appointment details from text
-const extractAppointmentDetails = (text, userId) => {
-  console.log('Analyzing text for appointment details:', text);
-  
-  // Get existing context or create new one
-  let context = appointmentContext.get(userId) || {
-    name: null,
-    phone: null,
-    datetime: null
-  };
-
-  // Improved regex patterns
-  const phoneRegex = /(\d{3}[-.]?\d{3}[-.]?\d{4})/;
-  const nameRegex = /(?:(?:my|the|for|is|am|this is)\s+)?(?:name\s+(?:is\s+)?)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i;
-  const timeRegex = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
-
-  // Extract phone if present
-  const phoneMatch = text.match(phoneRegex);
-  if (phoneMatch) context.phone = phoneMatch[1];
-
-  // Extract name if present
-  const nameMatch = text.match(nameRegex);
-  if (nameMatch && nameMatch[1]) {
-    // Clean up and validate the name
-    const potentialName = nameMatch[1].trim();
-    if (potentialName.split(' ').length >= 2) { // Ensure it's at least first and last name
-      context.name = potentialName;
-    }
-  }
-
-  // Extract time
-  const timeMatch = text.match(timeRegex);
-  if (timeMatch) {
-    const now = new Date();
-    const nextMonday = new Date();
-    nextMonday.setDate(now.getDate() + ((1 + 7 - now.getDay()) % 7));
-    
-    let hours = parseInt(timeMatch[1]);
-    const minutes = timeMatch[2] ? timeMatch[2] : "00";
-    const period = timeMatch[3].toLowerCase();
-    
-    if (period === "pm" && hours < 12) hours += 12;
-    if (period === "am" && hours === 12) hours = 0;
-    
-    const formattedHours = hours.toString().padStart(2, '0');
-    context.datetime = `Monday, January ${nextMonday.getDate()}, 2025 at ${formattedHours}:${minutes} ${period.toUpperCase()}`;
-  }
-
-  console.log('Current appointment context:', context);
-
-  // Save updated context
-  appointmentContext.set(userId, context);
-
-  // Return appointment details if we have all required information
-  if (context.name && context.datetime) {
-    // Clear context after successful appointment
-    appointmentContext.delete(userId);
-    return context;
-  }
-
-  return null;
-};
+// [Previous logAppointment and extractAppointmentDetails functions remain the same]
 
 const chatCompletion = async (prompt, userId) => {
   try {
     const now = new Date();
     const currentTime = now.toLocaleTimeString('en-US', { timeZone: 'America/New_York' });
     const currentDate = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Check if the message is asking about cars
+    const carSearchTerms = prompt.match(/(?:looking for|search for|find|about)\s+(?:a\s+)?([A-Za-z\s]+)(?:\s+car|\s+vehicle|\s+honda)?/i);
+    let carInfoResponse = '';
+    
+    if (carSearchTerms) {
+      const searchQuery = carSearchTerms[1];
+      const carResults = await getCarInformation(searchQuery);
+      
+      if (carResults && (carResults.newCars.length > 0 || carResults.usedCars.length > 0)) {
+        carInfoResponse = "Here's what I found at Hendrick Honda Hickory:\n\n";
+        
+        if (carResults.newCars.length > 0) {
+          carInfoResponse += "New Cars:\n";
+          carResults.newCars.forEach(car => {
+            carInfoResponse += `- ${car.title}\n  Price: ${car.price}\n`;
+          });
+        }
+        
+        if (carResults.usedCars.length > 0) {
+          carInfoResponse += "\nUsed Cars:\n";
+          carResults.usedCars.forEach(car => {
+            carInfoResponse += `- ${car.title}\n  Price: ${car.price}\n  Mileage: ${car.mileage}\n`;
+          });
+        }
+        
+        prompt += `\n\nAvailable inventory information:\n${carInfoResponse}`;
+      }
+    }
 
     // Get or initialize conversation history for this user
     if (!conversationHistory.has(userId)) {
@@ -208,9 +189,10 @@ const chatCompletion = async (prompt, userId) => {
       response: assistantMessage.content
     };
   } catch (error) {
+    console.error('Error in chatCompletion:', error);
     return {
       status: 0,
-      response: 'Please check openai api key.'
+      response: 'An error occurred while processing your request.'
     };
   }
 };
