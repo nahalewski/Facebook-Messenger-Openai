@@ -55,7 +55,7 @@ const logAppointment = (appointmentDetails) => {
       html: `
         <h2>New Appointment Scheduled</h2>
         <p><strong>Name:</strong> ${appointmentDetails.name}</p>
-        <p><strong>Phone:</strong> ${appointmentDetails.phone}</p>
+        <p><strong>Phone:</strong> ${appointmentDetails.phone || 'Not provided'}</p>
         <p><strong>Date/Time:</strong> ${appointmentDetails.datetime}</p>
         <p><em>This is an automated notification from your Honda Dealership Bot.</em></p>
       `
@@ -85,28 +85,41 @@ const extractAppointmentDetails = (text, userId) => {
     datetime: null
   };
 
-  // More flexible regex patterns
+  // Improved regex patterns
   const phoneRegex = /(\d{3}[-.]?\d{3}[-.]?\d{4})/;
-  const nameRegex = /(?:for|name is|I am|this is)?\s*([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\s|$)/i;
-  const dateTimeRegex = /(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)(?:\s*,)?\s+(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:AM|PM))|(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:AM|PM))/i;
+  const nameRegex = /(?:(?:my|the|for|is|am|this is)\s+)?(?:name\s+(?:is\s+)?)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i;
+  const timeRegex = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
 
-  // Extract phone
+  // Extract phone if present
   const phoneMatch = text.match(phoneRegex);
   if (phoneMatch) context.phone = phoneMatch[1];
 
-  // Extract name
+  // Extract name if present
   const nameMatch = text.match(nameRegex);
-  if (nameMatch) context.name = nameMatch[1];
+  if (nameMatch && nameMatch[1]) {
+    // Clean up and validate the name
+    const potentialName = nameMatch[1].trim();
+    if (potentialName.split(' ').length >= 2) { // Ensure it's at least first and last name
+      context.name = potentialName;
+    }
+  }
 
-  // Extract date/time
-  const dateTimeMatch = text.match(dateTimeRegex);
-  if (dateTimeMatch) {
+  // Extract time
+  const timeMatch = text.match(timeRegex);
+  if (timeMatch) {
     const now = new Date();
     const nextMonday = new Date();
     nextMonday.setDate(now.getDate() + ((1 + 7 - now.getDay()) % 7));
     
-    const time = dateTimeMatch[1] || dateTimeMatch[2];
-    context.datetime = `Monday, January ${nextMonday.getDate()}, 2025 at ${time}`;
+    let hours = parseInt(timeMatch[1]);
+    const minutes = timeMatch[2] ? timeMatch[2] : "00";
+    const period = timeMatch[3].toLowerCase();
+    
+    if (period === "pm" && hours < 12) hours += 12;
+    if (period === "am" && hours === 12) hours = 0;
+    
+    const formattedHours = hours.toString().padStart(2, '0');
+    context.datetime = `Monday, January ${nextMonday.getDate()}, 2025 at ${formattedHours}:${minutes} ${period.toUpperCase()}`;
   }
 
   console.log('Current appointment context:', context);
@@ -115,7 +128,7 @@ const extractAppointmentDetails = (text, userId) => {
   appointmentContext.set(userId, context);
 
   // Return appointment details if we have all required information
-  if (context.name && context.phone && context.datetime) {
+  if (context.name && context.datetime) {
     // Clear context after successful appointment
     appointmentContext.delete(userId);
     return context;
