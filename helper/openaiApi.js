@@ -2,8 +2,6 @@ const { OpenAI } = require("openai");
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
-const axios = require('axios');
-const cheerio = require('cheerio');
 require('dotenv').config();
 
 const openai = new OpenAI({
@@ -23,69 +21,6 @@ const transporter = nodemailer.createTransport({
 const conversationHistory = new Map();
 // Store partial appointment details
 const appointmentContext = new Map();
-
-// Function to fetch car inventory
-async function getCarInformation(searchQuery) {
-  try {
-    const baseUrl = 'https://www.carsourceoflenoir.com';
-    const newCarsUrl = `${baseUrl}/new-inventory/`;
-    const usedCarsUrl = `${baseUrl}/used-inventory/`;
-    
-    const results = {
-      newCars: [],
-      usedCars: []
-    };
-
-    // Fetch new cars
-    const newCarsResponse = await axios.get(newCarsUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
-    
-    let $ = cheerio.load(newCarsResponse.data);
-    $('.vehicle-card').each((i, element) => {
-      const title = $(element).find('.vehicle-card-title').text().trim();
-      const price = $(element).find('.price').text().trim();
-      
-      if (title.toLowerCase().includes(searchQuery.toLowerCase())) {
-        results.newCars.push({
-          title,
-          price,
-          type: 'New'
-        });
-      }
-    });
-
-    // Fetch used cars
-    const usedCarsResponse = await axios.get(usedCarsUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
-    
-    $ = cheerio.load(usedCarsResponse.data);
-    $('.vehicle-card').each((i, element) => {
-      const title = $(element).find('.vehicle-card-title').text().trim();
-      const price = $(element).find('.price').text().trim();
-      const mileage = $(element).find('.mileage').text().trim();
-      
-      if (title.toLowerCase().includes(searchQuery.toLowerCase())) {
-        results.usedCars.push({
-          title,
-          price,
-          mileage,
-          type: 'Used'
-        });
-      }
-    });
-
-    return results;
-  } catch (error) {
-    console.error('Error fetching car information:', error);
-    return null;
-  }
-}
 
 // Function to log appointments
 const logAppointment = (appointmentDetails) => {
@@ -115,14 +50,14 @@ const logAppointment = (appointmentDetails) => {
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: process.env.EMAIL_RECIPIENT,
-      subject: 'New Car Source Lenoir NC Appointment',
+      subject: 'New Honda Dealership Appointment',
       text: `New appointment has been scheduled:\n\n${logEntry}\n\nThis is an automated notification.`,
       html: `
         <h2>New Appointment Scheduled</h2>
         <p><strong>Name:</strong> ${appointmentDetails.name}</p>
         <p><strong>Phone:</strong> ${appointmentDetails.phone || 'Not provided'}</p>
         <p><strong>Date/Time:</strong> ${appointmentDetails.datetime}</p>
-        <p><em>This is an automated notification from Car Source Lenoir NC.</em></p>
+        <p><em>This is an automated notification from your Honda Dealership Bot.</em></p>
       `
     };
 
@@ -150,34 +85,27 @@ const extractAppointmentDetails = (text, userId) => {
     datetime: null
   };
 
-  // Remove the timestamp prefix from the text
-  const cleanText = text.replace(/\[Current time:[^\]]+\]\s*/, '');
-
   // Improved regex patterns
-  const phoneRegex = /(?:\b|phone(?:\s+number)?(?:\s+is)?:?\s*)(\d{3}[-.]?\d{3}[-.]?\d{4})/i;
-  const nameRegex = /(?:(?:my|the|for|is|am|this is)\s+)?(?:name\s+(?:is\s+)?)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?:\b|$)/i;
+  const phoneRegex = /(\d{3}[-.]?\d{3}[-.]?\d{4})/;
+  const nameRegex = /(?:(?:my|the|for|is|am|this is)\s+)?(?:name\s+(?:is\s+)?)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i;
   const timeRegex = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
 
   // Extract phone if present
-  const phoneMatch = cleanText.match(phoneRegex);
-  if (phoneMatch) {
-    context.phone = phoneMatch[1];
-    console.log('Found phone:', context.phone);
-  }
+  const phoneMatch = text.match(phoneRegex);
+  if (phoneMatch) context.phone = phoneMatch[1];
 
   // Extract name if present
-  const nameMatch = cleanText.match(nameRegex);
+  const nameMatch = text.match(nameRegex);
   if (nameMatch && nameMatch[1]) {
     // Clean up and validate the name
     const potentialName = nameMatch[1].trim();
     if (potentialName.split(' ').length >= 2) { // Ensure it's at least first and last name
       context.name = potentialName;
-      console.log('Found name:', context.name);
     }
   }
 
   // Extract time
-  const timeMatch = cleanText.match(timeRegex);
+  const timeMatch = text.match(timeRegex);
   if (timeMatch) {
     const now = new Date();
     const nextMonday = new Date();
@@ -190,14 +118,8 @@ const extractAppointmentDetails = (text, userId) => {
     if (period === "pm" && hours < 12) hours += 12;
     if (period === "am" && hours === 12) hours = 0;
     
-    // Validate business hours (8 AM to 6 PM)
-    const businessHours = hours >= 8 && hours <= 18;
-    
-    if (businessHours) {
-      const formattedHours = hours.toString().padStart(2, '0');
-      context.datetime = `Monday, January ${nextMonday.getDate()}, 2025 at ${formattedHours}:${minutes} ${period.toUpperCase()}`;
-      console.log('Found datetime:', context.datetime);
-    }
+    const formattedHours = hours.toString().padStart(2, '0');
+    context.datetime = `Monday, January ${nextMonday.getDate()}, 2025 at ${formattedHours}:${minutes} ${period.toUpperCase()}`;
   }
 
   console.log('Current appointment context:', context);
@@ -212,7 +134,6 @@ const extractAppointmentDetails = (text, userId) => {
     return context;
   }
 
-  // Keep context for future messages if we don't have all required information
   return null;
 };
 
@@ -222,66 +143,44 @@ const chatCompletion = async (prompt, userId) => {
     const currentTime = now.toLocaleTimeString('en-US', { timeZone: 'America/New_York' });
     const currentDate = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-    // Check if the message is asking about cars
-    const carSearchTerms = prompt.match(/(?:looking for|search for|find|about)\s+(?:a\s+)?([A-Za-z\s]+)(?:\s+car|\s+vehicle|\s+honda)?/i);
-    let carInfoResponse = '';
-    
-    if (carSearchTerms) {
-      const searchQuery = carSearchTerms[1];
-      const carResults = await getCarInformation(searchQuery);
-      
-      if (carResults && (carResults.newCars.length > 0 || carResults.usedCars.length > 0)) {
-        carInfoResponse = "Here's what I found at Car Source Lenoir NC:\n\n";
-        
-        if (carResults.newCars.length > 0) {
-          carInfoResponse += "New Cars:\n";
-          carResults.newCars.forEach(car => {
-            carInfoResponse += `- ${car.title}\n  Price: ${car.price}\n`;
-          });
-        }
-        
-        if (carResults.usedCars.length > 0) {
-          carInfoResponse += "\nUsed Cars:\n";
-          carResults.usedCars.forEach(car => {
-            carInfoResponse += `- ${car.title}\n  Price: ${car.price}\n  Mileage: ${car.mileage}\n`;
-          });
-        }
-        
-        prompt += `\n\nAvailable inventory information:\n${carInfoResponse}`;
-      }
-    }
-
     // Get or initialize conversation history for this user
     if (!conversationHistory.has(userId)) {
       conversationHistory.set(userId, [
         {
           role: "system",
-          content: `You are a helpful assistant at Car Source Lenoir NC in 2025. 
+          content: `You are an expert Business Growth and Lead Generation Consultant in 2025. 
                 Current Date: ${currentDate}
                 Current Time: ${currentTime}
 
-                Your primary tasks are:
-                - Setting up test drive appointments Monday-Friday, 8 AM to 6 PM only
-                - Scheduling service appointments Monday-Friday, 8 AM to 6 PM only
-                - Answering questions about available 2024-2025 vehicles
-                - Providing Car Source Lenoir NC dealership information
+                Your primary expertise includes:
+                - Lead Generation Strategies
+                - Business Development
+                - Sales Funnel Optimization
+                - Digital Marketing
+                - Customer Acquisition
+                - Market Analysis
+                - Growth Hacking
+                - ROI Optimization
                 
-                Key guidelines:
-                - Current year is 2025 - only schedule appointments for current dates
-                - Only schedule appointments during business hours (Mon-Fri, 8 AM - 6 PM)
-                - Always confirm the preferred day and time for appointments
-                - If a customer requests outside business hours, politely redirect them to available times
-                - Collect customer name and contact information for appointments
-                - Be concise and professional in responses
-                - Emphasize Car Source Lenoir NC's commitment to customer service
+                Key responsibilities:
+                - Analyze business growth opportunities
+                - Provide actionable lead generation strategies
+                - Offer data-driven marketing insights
+                - Help optimize sales processes
+                - Guide businesses in scaling operations
+                - Identify target market opportunities
+                - Suggest customer retention strategies
+                - Recommend marketing automation tools
                 
-                When collecting appointment information, always ask for:
-                1. Full Name
-                2. Phone Number
-                3. Preferred Day and Time
+                When consulting, always:
+                1. Understand the business's current situation
+                2. Identify key growth objectives
+                3. Provide specific, actionable recommendations
+                4. Focus on measurable outcomes
+                5. Consider budget and resource constraints
                 
-                Please always verify appointment details before confirming and ensure dates are in 2025.
-                Remember: Today is ${currentDate} at ${currentTime}.`
+                Remember to be strategic, data-driven, and results-oriented in your advice.
+                Current time context: ${currentDate} at ${currentTime}.`
         }
       ]);
     }
@@ -316,10 +215,9 @@ const chatCompletion = async (prompt, userId) => {
       response: assistantMessage.content
     };
   } catch (error) {
-    console.error('Error in chatCompletion:', error);
     return {
       status: 0,
-      response: 'An error occurred while processing your request.'
+      response: 'Please check openai api key.'
     };
   }
 };
