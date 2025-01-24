@@ -27,9 +27,9 @@ const appointmentContext = new Map();
 // Function to fetch car inventory
 async function getCarInformation(searchQuery) {
   try {
-    const baseUrl = 'https://www.hendrickhondahickory.com';
-    const newCarsUrl = `${baseUrl}/new-inventory/index.htm`;
-    const usedCarsUrl = `${baseUrl}/used-inventory/index.htm`;
+    const baseUrl = 'https://www.carsourceoflenoir.com';
+    const newCarsUrl = `${baseUrl}/new-inventory/`;
+    const usedCarsUrl = `${baseUrl}/used-inventory/`;
     
     const results = {
       newCars: [],
@@ -115,14 +115,14 @@ const logAppointment = (appointmentDetails) => {
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: process.env.EMAIL_RECIPIENT,
-      subject: 'New Honda Dealership Appointment',
+      subject: 'New Car Source Lenoir NC Appointment',
       text: `New appointment has been scheduled:\n\n${logEntry}\n\nThis is an automated notification.`,
       html: `
         <h2>New Appointment Scheduled</h2>
         <p><strong>Name:</strong> ${appointmentDetails.name}</p>
         <p><strong>Phone:</strong> ${appointmentDetails.phone || 'Not provided'}</p>
         <p><strong>Date/Time:</strong> ${appointmentDetails.datetime}</p>
-        <p><em>This is an automated notification from your Honda Dealership Bot.</em></p>
+        <p><em>This is an automated notification from Car Source Lenoir NC.</em></p>
       `
     };
 
@@ -231,7 +231,7 @@ const chatCompletion = async (prompt, userId) => {
       const carResults = await getCarInformation(searchQuery);
       
       if (carResults && (carResults.newCars.length > 0 || carResults.usedCars.length > 0)) {
-        carInfoResponse = "Here's what I found at Hendrick Honda Hickory:\n\n";
+        carInfoResponse = "Here's what I found at Car Source Lenoir NC:\n\n";
         
         if (carResults.newCars.length > 0) {
           carInfoResponse += "New Cars:\n";
@@ -256,15 +256,15 @@ const chatCompletion = async (prompt, userId) => {
       conversationHistory.set(userId, [
         {
           role: "system",
-          content: `You are a helpful assistant at Hendrick Honda dealership in 2025. 
+          content: `You are a helpful assistant at Car Source Lenoir NC in 2025. 
                 Current Date: ${currentDate}
                 Current Time: ${currentTime}
 
                 Your primary tasks are:
                 - Setting up test drive appointments Monday-Friday, 8 AM to 6 PM only
                 - Scheduling service appointments Monday-Friday, 8 AM to 6 PM only
-                - Answering questions about available 2024-2025 Honda vehicles
-                - Providing Hendrick Honda dealership information
+                - Answering questions about available 2024-2025 vehicles
+                - Providing Car Source Lenoir NC dealership information
                 
                 Key guidelines:
                 - Current year is 2025 - only schedule appointments for current dates
@@ -273,7 +273,7 @@ const chatCompletion = async (prompt, userId) => {
                 - If a customer requests outside business hours, politely redirect them to available times
                 - Collect customer name and contact information for appointments
                 - Be concise and professional in responses
-                - Emphasize Hendrick Honda's commitment to customer service
+                - Emphasize Car Source Lenoir NC's commitment to customer service
                 
                 When collecting appointment information, always ask for:
                 1. Full Name
