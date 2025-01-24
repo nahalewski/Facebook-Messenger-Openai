@@ -3,7 +3,7 @@ require('dotenv').config();
 
 const webApp = express();
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 
 webApp.use(express.urlencoded({ extended: true }));
 webApp.use(express.json());
