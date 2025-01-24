@@ -24,6 +24,69 @@ const conversationHistory = new Map();
 // Store partial appointment details
 const appointmentContext = new Map();
 
+// Function to fetch car inventory
+async function getCarInformation(searchQuery) {
+  try {
+    const baseUrl = 'https://www.hendrickhondahickory.com';
+    const newCarsUrl = `${baseUrl}/new-inventory/index.htm`;
+    const usedCarsUrl = `${baseUrl}/used-inventory/index.htm`;
+    
+    const results = {
+      newCars: [],
+      usedCars: []
+    };
+
+    // Fetch new cars
+    const newCarsResponse = await axios.get(newCarsUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    
+    let $ = cheerio.load(newCarsResponse.data);
+    $('.vehicle-card').each((i, element) => {
+      const title = $(element).find('.vehicle-card-title').text().trim();
+      const price = $(element).find('.price').text().trim();
+      
+      if (title.toLowerCase().includes(searchQuery.toLowerCase())) {
+        results.newCars.push({
+          title,
+          price,
+          type: 'New'
+        });
+      }
+    });
+
+    // Fetch used cars
+    const usedCarsResponse = await axios.get(usedCarsUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    
+    $ = cheerio.load(usedCarsResponse.data);
+    $('.vehicle-card').each((i, element) => {
+      const title = $(element).find('.vehicle-card-title').text().trim();
+      const price = $(element).find('.price').text().trim();
+      const mileage = $(element).find('.mileage').text().trim();
+      
+      if (title.toLowerCase().includes(searchQuery.toLowerCase())) {
+        results.usedCars.push({
+          title,
+          price,
+          mileage,
+          type: 'Used'
+        });
+      }
+    });
+
+    return results;
+  } catch (error) {
+    console.error('Error fetching car information:', error);
+    return null;
+  }
+}
+
 // Function to log appointments
 const logAppointment = (appointmentDetails) => {
   try {
@@ -87,27 +150,34 @@ const extractAppointmentDetails = (text, userId) => {
     datetime: null
   };
 
+  // Remove the timestamp prefix from the text
+  const cleanText = text.replace(/\[Current time:[^\]]+\]\s*/, '');
+
   // Improved regex patterns
-  const phoneRegex = /(\d{3}[-.]?\d{3}[-.]?\d{4})/;
-  const nameRegex = /(?:(?:my|the|for|is|am|this is)\s+)?(?:name\s+(?:is\s+)?)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i;
+  const phoneRegex = /(?:\b|phone(?:\s+number)?(?:\s+is)?:?\s*)(\d{3}[-.]?\d{3}[-.]?\d{4})/i;
+  const nameRegex = /(?:(?:my|the|for|is|am|this is)\s+)?(?:name\s+(?:is\s+)?)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?:\b|$)/i;
   const timeRegex = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
 
   // Extract phone if present
-  const phoneMatch = text.match(phoneRegex);
-  if (phoneMatch) context.phone = phoneMatch[1];
+  const phoneMatch = cleanText.match(phoneRegex);
+  if (phoneMatch) {
+    context.phone = phoneMatch[1];
+    console.log('Found phone:', context.phone);
+  }
 
   // Extract name if present
-  const nameMatch = text.match(nameRegex);
+  const nameMatch = cleanText.match(nameRegex);
   if (nameMatch && nameMatch[1]) {
     // Clean up and validate the name
     const potentialName = nameMatch[1].trim();
     if (potentialName.split(' ').length >= 2) { // Ensure it's at least first and last name
       context.name = potentialName;
+      console.log('Found name:', context.name);
     }
   }
 
   // Extract time
-  const timeMatch = text.match(timeRegex);
+  const timeMatch = cleanText.match(timeRegex);
   if (timeMatch) {
     const now = new Date();
     const nextMonday = new Date();
@@ -120,8 +190,14 @@ const extractAppointmentDetails = (text, userId) => {
     if (period === "pm" && hours < 12) hours += 12;
     if (period === "am" && hours === 12) hours = 0;
     
-    const formattedHours = hours.toString().padStart(2, '0');
-    context.datetime = `Monday, January ${nextMonday.getDate()}, 2025 at ${formattedHours}:${minutes} ${period.toUpperCase()}`;
+    // Validate business hours (8 AM to 6 PM)
+    const businessHours = hours >= 8 && hours <= 18;
+    
+    if (businessHours) {
+      const formattedHours = hours.toString().padStart(2, '0');
+      context.datetime = `Monday, January ${nextMonday.getDate()}, 2025 at ${formattedHours}:${minutes} ${period.toUpperCase()}`;
+      console.log('Found datetime:', context.datetime);
+    }
   }
 
   console.log('Current appointment context:', context);
@@ -136,71 +212,9 @@ const extractAppointmentDetails = (text, userId) => {
     return context;
   }
 
+  // Keep context for future messages if we don't have all required information
   return null;
 };
-
-// Function to fetch car inventory
-async function getCarInformation(searchQuery) {
-  try {
-    const baseUrl = 'https://www.hendrickhondahickory.com';
-    const newCarsUrl = `${baseUrl}/new-inventory/index.htm`;
-    const usedCarsUrl = `${baseUrl}/used-inventory/index.htm`;
-    
-    const results = {
-      newCars: [],
-      usedCars: []
-    };
-
-    // Fetch new cars
-    const newCarsResponse = await axios.get(newCarsUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
-    
-    let $ = cheerio.load(newCarsResponse.data);
-    $('.vehicle-card').each((i, element) => {
-      const title = $(element).find('.vehicle-card-title').text().trim();
-      const price = $(element).find('.price').text().trim();
-      
-      if (title.toLowerCase().includes(searchQuery.toLowerCase())) {
-        results.newCars.push({
-          title,
-          price,
-          type: 'New'
-        });
-      }
-    });
-
-    // Fetch used cars
-    const usedCarsResponse = await axios.get(usedCarsUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
-    
-    $ = cheerio.load(usedCarsResponse.data);
-    $('.vehicle-card').each((i, element) => {
-      const title = $(element).find('.vehicle-card-title').text().trim();
-      const price = $(element).find('.price').text().trim();
-      const mileage = $(element).find('.mileage').text().trim();
-      
-      if (title.toLowerCase().includes(searchQuery.toLowerCase())) {
-        results.usedCars.push({
-          title,
-          price,
-          mileage,
-          type: 'Used'
-        });
-      }
-    });
-
-    return results;
-  } catch (error) {
-    console.error('Error fetching car information:', error);
-    return null;
-  }
-}
 
 const chatCompletion = async (prompt, userId) => {
   try {
