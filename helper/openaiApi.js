@@ -1,10 +1,20 @@
 const { OpenAI } = require("openai");
 const fs = require('fs');
 const path = require('path');
+const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Configure email transporter
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_APP_PASSWORD
+  }
 });
 
 // Store conversations for each user
@@ -35,6 +45,30 @@ const logAppointment = (appointmentDetails) => {
 
     fs.appendFileSync(logFile, logEntry);
     console.log('Successfully wrote to log file');
+
+    // Send email notification
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: process.env.EMAIL_RECIPIENT,
+      subject: 'New Honda Dealership Appointment',
+      text: `New appointment has been scheduled:\n\n${logEntry}\n\nThis is an automated notification.`,
+      html: `
+        <h2>New Appointment Scheduled</h2>
+        <p><strong>Name:</strong> ${appointmentDetails.name}</p>
+        <p><strong>Phone:</strong> ${appointmentDetails.phone}</p>
+        <p><strong>Date/Time:</strong> ${appointmentDetails.datetime}</p>
+        <p><em>This is an automated notification from your Honda Dealership Bot.</em></p>
+      `
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.error('Email sending failed:', error);
+      } else {
+        console.log('Email notification sent:', info.response);
+      }
+    });
+
   } catch (error) {
     console.error('Error in logAppointment:', error);
   }
