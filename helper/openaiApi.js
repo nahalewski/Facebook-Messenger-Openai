@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
-const { searchInventory, formatVehicleResults } = require('./inventorySearch');
+const { searchInventory, formatSearchResults } = require('./inventorySearch');
 require('dotenv').config();
 
 const openai = new OpenAI({
@@ -476,7 +476,7 @@ const chatCompletion = async (prompt, userId) => {
         if (searchMatch) {
             console.log('Vehicle search detected:', searchMatch[0]);
             const searchResults = await searchInventory(searchMatch[0]);
-            const formattedResults = formatVehicleResults(searchResults);
+            const formattedResults = formatSearchResults(searchResults);
             
             if (!conversationHistory.has(userId)) {
                 initializeConversation(userId, currentDate, currentTime);
