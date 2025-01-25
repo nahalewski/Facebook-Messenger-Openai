@@ -59,6 +59,50 @@ const getNextAvailableTime = (dateTime) => {
   return nextTime;
 };
 
+// Function to check if current time is within business hours
+const isCurrentlyWithinBusinessHours = () => {
+  const now = new Date();
+  const day = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const hours = now.getHours();
+  
+  if (!BUSINESS_HOURS[day]) return false;
+  if (BUSINESS_HOURS[day].open === 0 && BUSINESS_HOURS[day].close === 0) return false;
+  
+  return hours >= BUSINESS_HOURS[day].open && hours < BUSINESS_HOURS[day].close;
+};
+
+// Function to get next business hours message
+const getNextBusinessHoursMessage = () => {
+  const now = new Date();
+  const day = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const currentHour = now.getHours();
+
+  // If it's Sunday, next opening is Monday
+  if (day === 'Sunday') {
+    return "We're currently closed. Our next business hours are Monday from 9:00 AM to 7:00 PM.";
+  }
+
+  // If it's before opening hours today
+  if (currentHour < BUSINESS_HOURS[day].open) {
+    return `We're currently closed. We'll open today at 9:00 AM.`;
+  }
+
+  // If it's after closing hours
+  if (currentHour >= BUSINESS_HOURS[day].close) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowDay = tomorrow.toLocaleDateString('en-US', { weekday: 'long' });
+    
+    if (tomorrowDay === 'Sunday') {
+      return "We're currently closed. Our next business hours are Monday from 9:00 AM to 7:00 PM.";
+    }
+    
+    return `We're currently closed. We'll open tomorrow at 9:00 AM.`;
+  }
+
+  return "We're currently open! How can I assist you today?";
+};
+
 // Function to log appointments
 const logAppointment = (appointmentDetails) => {
   try {
@@ -208,6 +252,77 @@ const extractAppointmentDetails = (text, userId) => {
   return null;
 };
 
+const initializeConversation = (userId, currentDate, currentTime) => {
+  conversationHistory.set(userId, [
+    {
+      role: "system",
+      content: `You are a knowledgeable and helpful 24/7 representative for Johnson City Nissan, located at 2316 N Roan St, Johnson City, TN 37601. 
+
+Current Date: ${currentDate}
+Current Time: ${currentTime}
+
+I am available 24/7 to help schedule appointments during our dealership's business hours:
+- Monday-Friday: 9:00 AM - 7:00 PM
+- Saturday: 9:00 AM - 6:00 PM
+- Sunday: Closed
+
+Key Responsibilities:
+1. Available 24/7 to:
+   - Schedule appointments for business hours
+   - Answer questions about vehicles and services
+   - Provide dealership information
+   - Help with all customer inquiries
+
+2. Schedule appointments for:
+   - Test drives
+   - Service appointments
+   - Vehicle maintenance
+   - Sales consultations
+   Note: All appointments will be scheduled during business hours, but I can take scheduling requests 24/7
+
+3. Provide information about:
+   - Current vehicle inventory
+   - Service offerings
+   - Financing options
+   - Special deals and promotions
+   - Vehicle features and specifications
+   - Service and maintenance
+   - Dealership policies
+   - Directions and contact information
+
+When scheduling appointments:
+1. Take appointment requests 24/7
+2. Always schedule within business hours:
+   - Monday-Friday: 9:00 AM - 7:00 PM
+   - Saturday: 9:00 AM - 6:00 PM
+   - No appointments on Sunday
+3. Collect all necessary information:
+   - Name
+   - Phone number
+   - Service/vehicle interest
+   - Preferred time
+4. If requested time is outside business hours:
+   - Acknowledge the request
+   - Offer the next available time during business hours
+   - Example: "I can schedule your appointment for the next available time at 9:00 AM tomorrow"
+
+Remember:
+- I am available 24/7 to take appointment requests
+- All appointments must be during business hours
+- Be professional and courteous
+- Provide accurate information
+- Confirm all appointment details
+
+Contact Information:
+- Phone: (423) 282-2221
+- Website: https://www.johnsoncitynissan.com
+- Address: 2316 N Roan St, Johnson City, TN 37601
+
+Current time context: ${currentDate} at ${currentTime}`
+    }
+  ]);
+};
+
 const chatCompletion = async (prompt, userId) => {
   try {
     const now = new Date();
@@ -223,7 +338,6 @@ const chatCompletion = async (prompt, userId) => {
       const searchResults = await searchInventory(searchMatch[0]);
       const formattedResults = formatVehicleResults(searchResults);
       
-      // Add the search results to the conversation
       if (!conversationHistory.has(userId)) {
         initializeConversation(userId, currentDate, currentTime);
       }
@@ -261,6 +375,24 @@ const chatCompletion = async (prompt, userId) => {
     // Check for appointment details
     const appointmentDetails = extractAppointmentDetails(prompt, userId);
     if (appointmentDetails && appointmentDetails.name && appointmentDetails.phone && appointmentDetails.datetime) {
+      // Ensure appointment is during business hours
+      const appointmentDate = new Date(appointmentDetails.datetime);
+      if (!isWithinBusinessHours(appointmentDate)) {
+        const nextAvailable = getNextAvailableTime(appointmentDate);
+        appointmentDetails.datetime = nextAvailable.toLocaleString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        
+        // Add a note about the rescheduling
+        appointmentDetails.notes = `Original request was for ${appointmentDate.toLocaleString('en-US')}. Rescheduled to next available business hours.`;
+      }
+      
       logAppointment(appointmentDetails);
     }
 
@@ -275,63 +407,6 @@ const chatCompletion = async (prompt, userId) => {
       response: 'I apologize, but I encountered an error. Please try again or contact the dealership directly at (423) 282-2221.'
     };
   }
-};
-
-// Helper function to initialize conversation
-const initializeConversation = (userId, currentDate, currentTime) => {
-  conversationHistory.set(userId, [
-    {
-      role: "system",
-      content: `You are a knowledgeable and helpful representative for Johnson City Nissan, located at 2316 N Roan St, Johnson City, TN 37601. 
-
-Current Date: ${currentDate}
-Current Time: ${currentTime}
-
-Business Hours:
-- Monday-Friday: 9:00 AM - 7:00 PM
-- Saturday: 9:00 AM - 6:00 PM
-- Sunday: Closed
-
-Key Responsibilities:
-1. Schedule appointments for:
-   - Test drives
-   - Service appointments
-   - Vehicle maintenance
-   - Sales consultations
-
-2. Provide information about:
-   - Current vehicle inventory
-   - Service offerings
-   - Financing options
-   - Special deals and promotions
-
-3. Answer questions about:
-   - Vehicle features and specifications
-   - Service and maintenance
-   - Dealership policies
-   - Directions and contact information
-
-When scheduling appointments:
-1. Collect customer name and phone number
-2. Verify appointment time is during business hours
-3. Note specific vehicle or service interests
-4. Confirm all details before finalizing
-
-Remember:
-- Be professional and courteous
-- Provide accurate information
-- Guide customers through the scheduling process
-- Suggest alternative times if requested time is unavailable
-- Collect all necessary information for appointments
-
-Contact Information:
-- Phone: (423) 282-2221
-- Website: https://www.johnsoncitynissan.com
-- Address: 2316 N Roan St, Johnson City, TN 37601
-
-Current time context: ${currentDate} at ${currentTime}`
-    }
-  ]);
 };
 
 // Function to clear conversation history for a user
