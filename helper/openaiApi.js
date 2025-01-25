@@ -377,6 +377,24 @@ const chatCompletion = async (prompt, userId) => {
         const currentTime = now.toLocaleTimeString('en-US', { timeZone: 'America/New_York' });
         const currentDate = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
+        // Check for voucher requests
+        const voucherRegex = /(voucher|coupon|discount|deal|offer|special)/i;
+        if (voucherRegex.test(prompt)) {
+            const voucherResponse = handleVoucherRequest();
+            if (!conversationHistory.has(userId)) {
+                initializeConversation(userId, currentDate, currentTime);
+            }
+            const messages = conversationHistory.get(userId);
+            messages.push({ 
+                role: "assistant", 
+                content: voucherResponse 
+            });
+            return {
+                status: 1,
+                response: voucherResponse
+            };
+        }
+
         // Check for appointment details first
         const appointmentDetails = extractAppointmentDetails(prompt, userId);
         if (appointmentDetails && appointmentDetails.name && appointmentDetails.phone && appointmentDetails.datetime) {
@@ -399,59 +417,17 @@ const chatCompletion = async (prompt, userId) => {
                 logAppointment(appointmentDetails);
 
                 // Prepare a response about the rescheduling
-                let response = `Thank you for scheduling a ${appointmentDetails.service} with Johnson City Nissan! `;
-                response += `I notice you requested ${originalDateTime}, which is outside our business hours. `;
-                response += `I've scheduled your appointment for the next available time: ${appointmentDetails.datetime}.\n\n`;
-                response += `Here's your appointment details:\n`;
-                response += `Name: ${appointmentDetails.name}\n`;
-                response += `Phone: ${appointmentDetails.phone}\n`;
-                response += `Service: ${appointmentDetails.service}\n`;
-                response += `Date/Time: ${appointmentDetails.datetime}\n\n`;
-                
-                if (appointmentDetails.service.toLowerCase().includes('test drive')) {
-                    response += `For your test drive, please bring:\n`;
-                    response += `1. A valid driver's license\n`;
-                    response += `2. Proof of insurance\n`;
-                    response += `3. A form of identification\n\n`;
-                    response += `Would you like me to send you directions to our dealership or help you with anything else?`;
-                } else {
-                    response += `Is there anything else you need assistance with?`;
+                let response = `Perfect! I've got you scheduled for ${appointmentDetails.datetime}. `;
+                if (originalDateTime !== appointmentDetails.datetime) {
+                    response += `I adjusted the time slightly to make sure you get our full attention during business hours. `;
                 }
-
-                if (!conversationHistory.has(userId)) {
-                    initializeConversation(userId, currentDate, currentTime);
-                }
-                const messages = conversationHistory.get(userId);
-                messages.push({ 
-                    role: "assistant", 
-                    content: response 
-                });
-
-                return {
-                    status: 1,
-                    response: response
-                };
-            } else {
-                // Log the appointment
-                logAppointment(appointmentDetails);
-
-                // Prepare confirmation response
-                let response = `Perfect! I've scheduled your ${appointmentDetails.service} for ${appointmentDetails.datetime}.\n\n`;
-                response += `Here's your appointment details:\n`;
-                response += `Name: ${appointmentDetails.name}\n`;
-                response += `Phone: ${appointmentDetails.phone}\n`;
-                response += `Service: ${appointmentDetails.service}\n`;
-                response += `Date/Time: ${appointmentDetails.datetime}\n\n`;
+                response += `\nI'll make sure everything is ready for your ${appointmentDetails.service}. `;
 
                 if (appointmentDetails.service.toLowerCase().includes('test drive')) {
-                    response += `For your test drive, please bring:\n`;
-                    response += `1. A valid driver's license\n`;
-                    response += `2. Proof of insurance\n`;
-                    response += `3. A form of identification\n\n`;
-                    response += `Would you like me to send you directions to our dealership or help you with anything else?`;
-                } else {
-                    response += `Is there anything else you need assistance with?`;
+                    response += `\nJust remember to bring your driver's license and insurance. `;
                 }
+
+                response += `\nIs there anything specific you'd like me to have ready for your visit?`;
 
                 if (!conversationHistory.has(userId)) {
                     initializeConversation(userId, currentDate, currentTime);
@@ -500,17 +476,23 @@ const chatCompletion = async (prompt, userId) => {
         const messages = conversationHistory.get(userId);
         messages.push({ role: "user", content: prompt });
 
+        // Add sales-focused system message
+        const systemMessage = {
+            role: "system",
+            content: `You are a friendly and helpful car dealership representative. Your goal is to build rapport with customers and help them find their perfect vehicle. Be conversational and natural, avoiding overly formal language. Focus on scheduling in-person visits and test drives. Don't mention prices unless specifically asked, and even then, emphasize the value and available deals rather than specific numbers. Never provide contact information - instead, offer to help schedule appointments yourself.`
+        };
+
         // Limit conversation history
-        const limitedMessages = messages.slice(-10);
+        const limitedMessages = [systemMessage, ...messages.slice(-10)];
 
         const response = await openai.chat.completions.create({
             messages: limitedMessages,
             model: "gpt-4",
-            temperature: 0.7,
+            temperature: 0.8,
             max_tokens: 500,
             top_p: 0.9,
-            frequency_penalty: 0.2,
-            presence_penalty: 0.2
+            frequency_penalty: 0.3,
+            presence_penalty: 0.3
         });
 
         const assistantMessage = response.choices[0].message;
@@ -532,11 +514,11 @@ const chatCompletion = async (prompt, userId) => {
                 const fallbackResponse = await openai.chat.completions.create({
                     messages: limitedMessages,
                     model: "gpt-3.5-turbo",
-                    temperature: 0.7,
+                    temperature: 0.8,
                     max_tokens: 500,
                     top_p: 0.9,
-                    frequency_penalty: 0.2,
-                    presence_penalty: 0.2
+                    frequency_penalty: 0.3,
+                    presence_penalty: 0.3
                 });
 
                 const assistantMessage = fallbackResponse.choices[0].message;
@@ -553,7 +535,7 @@ const chatCompletion = async (prompt, userId) => {
 
         return {
             status: 0,
-            response: 'I apologize, but I encountered an error. Please try again or contact the dealership directly at (423) 282-2221.'
+            response: "I'm having a bit of trouble with my system right now. Could you please try asking your question again?"
         };
     }
 };
@@ -561,6 +543,10 @@ const chatCompletion = async (prompt, userId) => {
 // Function to clear conversation history for a user
 const clearConversation = (userId) => {
     conversationHistory.delete(userId);
+};
+
+const handleVoucherRequest = () => {
+    return `I'd be happy to help you with a voucher! Can you please provide more details about what you're looking for?`;
 };
 
 module.exports = {
