@@ -1,78 +1,99 @@
-const puppeteer = require('puppeteer-core');
-const chromium = require('@sparticuz/chromium');
+const axios = require('axios');
+const cheerio = require('cheerio');
 
 const DEALERSHIP_URL = 'https://www.johnsoncitynissan.com';
 
 async function searchInventory(query) {
-    let browser = null;
-    
     try {
-        // Configure chrome to work in serverless environment
-        browser = await puppeteer.launch({
-            args: chromium.args,
-            defaultViewport: chromium.defaultViewport,
-            executablePath: process.env.CHROME_EXECUTABLE_PATH || await chromium.executablePath(),
-            headless: chromium.headless,
-            ignoreHTTPSErrors: true
-        });
+        // Configure axios with proper headers
+        const axiosConfig = {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            },
+            timeout: 10000
+        };
 
-        const page = await browser.newPage();
-        
-        // Set user agent
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-
-        // Navigate to the inventory search page
+        // Make the request to the inventory page
         const searchUrl = `${DEALERSHIP_URL}/new-inventory/index.htm?search=${encodeURIComponent(query)}`;
-        
-        try {
-            await page.goto(searchUrl, { 
-                waitUntil: 'networkidle0',
-                timeout: 30000 
-            });
-        } catch (error) {
-            console.error('Navigation error:', error);
-            throw new Error('Failed to load the inventory page');
+        const response = await axios.get(searchUrl, axiosConfig);
+
+        if (response.status !== 200) {
+            throw new Error(`Failed to fetch inventory. Status: ${response.status}`);
         }
 
-        // Wait for the inventory items to load
-        await page.waitForSelector('.inventory-items', { timeout: 10000 }).catch(() => null);
+        // Load the HTML into cheerio
+        const $ = cheerio.load(response.data);
+        const vehicles = [];
 
-        // Extract vehicle information
-        const vehicles = await page.evaluate(() => {
-            const results = [];
-            const items = document.querySelectorAll('.inventory-item');
+        // Find all vehicle items
+        $('.inventory-item').each((index, element) => {
+            try {
+                const $item = $(element);
+                const title = $item.find('.title').text().trim();
+                const price = $item.find('.price').text().trim();
+                const mileage = $item.find('.mileage').text().trim();
+                const vin = $item.find('.vin').text().trim();
+                const imageUrl = $item.find('img').attr('src');
+                const link = $item.find('a.vehicle-details').attr('href');
+                const stockNumber = $item.find('.stock').text().trim();
 
-            items.forEach(item => {
-                try {
-                    const title = item.querySelector('.title')?.textContent.trim() || '';
-                    const price = item.querySelector('.price')?.textContent.trim() || '';
-                    const mileage = item.querySelector('.mileage')?.textContent.trim() || '';
-                    const vin = item.querySelector('.vin')?.textContent.trim() || '';
-                    const imageUrl = item.querySelector('img')?.src || '';
-                    const link = item.querySelector('a.vehicle-details')?.href || '';
-                    const stockNumber = item.querySelector('.stock')?.textContent.trim() || '';
-
-                    // Only add if we have at least a title
-                    if (title) {
-                        results.push({
-                            title,
-                            price,
-                            mileage,
-                            vin,
-                            imageUrl,
-                            link,
-                            stockNumber
-                        });
-                    }
-                } catch (error) {
-                    console.error('Error extracting vehicle data:', error);
+                // Only add if we have at least a title
+                if (title) {
+                    vehicles.push({
+                        title,
+                        price,
+                        mileage,
+                        vin,
+                        imageUrl,
+                        link: link ? `${DEALERSHIP_URL}${link}` : '',
+                        stockNumber
+                    });
                 }
-            });
-
-            return results;
+            } catch (error) {
+                console.error('Error extracting vehicle data:', error);
+            }
         });
 
-        await browser.close();
+        // If no vehicles found, try searching used inventory
+        if (vehicles.length === 0 && !query.toLowerCase().includes('used')) {
+            const usedSearchUrl = `${DEALERSHIP_URL}/used-inventory/index.htm?search=${encodeURIComponent(query)}`;
+            const usedResponse = await axios.get(usedSearchUrl, axiosConfig);
+            
+            if (usedResponse.status === 200) {
+                const $used = cheerio.load(usedResponse.data);
+                
+                $used('.inventory-item').each((index, element) => {
+                    try {
+                        const $item = $(element);
+                        const title = $item.find('.title').text().trim();
+                        const price = $item.find('.price').text().trim();
+                        const mileage = $item.find('.mileage').text().trim();
+                        const vin = $item.find('.vin').text().trim();
+                        const imageUrl = $item.find('img').attr('src');
+                        const link = $item.find('a.vehicle-details').attr('href');
+                        const stockNumber = $item.find('.stock').text().trim();
+
+                        if (title) {
+                            vehicles.push({
+                                title,
+                                price,
+                                mileage,
+                                vin,
+                                imageUrl,
+                                link: link ? `${DEALERSHIP_URL}${link}` : '',
+                                stockNumber
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error extracting used vehicle data:', error);
+                    }
+                });
+            }
+        }
 
         if (vehicles.length === 0) {
             return {
@@ -90,13 +111,6 @@ async function searchInventory(query) {
 
     } catch (error) {
         console.error('Error searching inventory:', error);
-        if (browser) {
-            try {
-                await browser.close();
-            } catch (closeError) {
-                console.error('Error closing browser:', closeError);
-            }
-        }
         return {
             success: false,
             message: 'I\'m currently unable to access our live inventory system. However, I\'d be happy to schedule an appointment for you to visit our dealership and see our available vehicles in person. Would you like me to help you schedule a visit?',
@@ -105,7 +119,6 @@ async function searchInventory(query) {
     }
 }
 
-// Function to format vehicle information into a readable message
 function formatVehicleResults(searchResults) {
     if (!searchResults.success) {
         return searchResults.message;
