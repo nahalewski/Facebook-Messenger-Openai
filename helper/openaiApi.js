@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
+const { searchInventory, formatVehicleResults } = require('./inventorySearch');
 require('dotenv').config();
 
 const openai = new OpenAI({
@@ -213,12 +214,75 @@ const chatCompletion = async (prompt, userId) => {
     const currentTime = now.toLocaleTimeString('en-US', { timeZone: 'America/New_York' });
     const currentDate = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-    // Get or initialize conversation history
+    // Check for vehicle search queries
+    const vehicleSearchRegex = /(search|find|show|list|available|have|got|any)\s+(new|used|certified|pre-owned)?\s*(trucks?|cars?|suvs?|vehicles?|inventory|([a-zA-Z-]+\s+)?(altima|maxima|rogue|murano|pathfinder|frontier|titan|sentra|versa|kicks|armada)s?)/i;
+    const searchMatch = prompt.match(vehicleSearchRegex);
+
+    if (searchMatch) {
+      console.log('Vehicle search detected:', searchMatch[0]);
+      const searchResults = await searchInventory(searchMatch[0]);
+      const formattedResults = formatVehicleResults(searchResults);
+      
+      // Add the search results to the conversation
+      if (!conversationHistory.has(userId)) {
+        initializeConversation(userId, currentDate, currentTime);
+      }
+      const messages = conversationHistory.get(userId);
+      messages.push({ 
+        role: "assistant", 
+        content: formattedResults 
+      });
+      
+      return {
+        status: 1,
+        response: formattedResults
+      };
+    }
+
+    // Regular chat handling
     if (!conversationHistory.has(userId)) {
-      conversationHistory.set(userId, [
-        {
-          role: "system",
-          content: `You are a knowledgeable and helpful representative for Johnson City Nissan, located at 2316 N Roan St, Johnson City, TN 37601. 
+      initializeConversation(userId, currentDate, currentTime);
+    }
+
+    const messages = conversationHistory.get(userId);
+    messages.push({ role: "user", content: prompt });
+
+    // Limit conversation history
+    const limitedMessages = messages.slice(-10);
+
+    const response = await openai.chat.completions.create({
+      messages: limitedMessages,
+      model: "gpt-3.5-turbo",
+    });
+
+    const assistantMessage = response.choices[0].message;
+    messages.push(assistantMessage);
+
+    // Check for appointment details
+    const appointmentDetails = extractAppointmentDetails(prompt, userId);
+    if (appointmentDetails && appointmentDetails.name && appointmentDetails.phone && appointmentDetails.datetime) {
+      logAppointment(appointmentDetails);
+    }
+
+    return {
+      status: 1,
+      response: assistantMessage.content
+    };
+  } catch (error) {
+    console.error('Error in chatCompletion:', error);
+    return {
+      status: 0,
+      response: 'I apologize, but I encountered an error. Please try again or contact the dealership directly at (423) 282-2221.'
+    };
+  }
+};
+
+// Helper function to initialize conversation
+const initializeConversation = (userId, currentDate, currentTime) => {
+  conversationHistory.set(userId, [
+    {
+      role: "system",
+      content: `You are a knowledgeable and helpful representative for Johnson City Nissan, located at 2316 N Roan St, Johnson City, TN 37601. 
 
 Current Date: ${currentDate}
 Current Time: ${currentTime}
@@ -266,41 +330,8 @@ Contact Information:
 - Address: 2316 N Roan St, Johnson City, TN 37601
 
 Current time context: ${currentDate} at ${currentTime}`
-        }
-      ]);
     }
-
-    const messages = conversationHistory.get(userId);
-    messages.push({ role: "user", content: prompt });
-
-    // Limit conversation history
-    const limitedMessages = messages.slice(-10);
-
-    const response = await openai.chat.completions.create({
-      messages: limitedMessages,
-      model: "gpt-3.5-turbo",
-    });
-
-    const assistantMessage = response.choices[0].message;
-    messages.push(assistantMessage);
-
-    // Check for appointment details
-    const appointmentDetails = extractAppointmentDetails(prompt, userId);
-    if (appointmentDetails && appointmentDetails.name && appointmentDetails.phone && appointmentDetails.datetime) {
-      logAppointment(appointmentDetails);
-    }
-
-    return {
-      status: 1,
-      response: assistantMessage.content
-    };
-  } catch (error) {
-    console.error('Error in chatCompletion:', error);
-    return {
-      status: 0,
-      response: 'I apologize, but I encountered an error. Please try again or contact the dealership directly at (423) 282-2221.'
-    };
-  }
+  ]);
 };
 
 // Function to clear conversation history for a user
