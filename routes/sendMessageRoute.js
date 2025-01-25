@@ -6,50 +6,20 @@ const { chatCompletion } = require('../helper/openaiApi');
 const { sendMessage, setTypingOff, setTypingOn } = require('../helper/messengerApi');
 
 router.post('/', async (req, res) => {
-  const { senderId, query } = req.body;
-  
-  // Validate required fields
-  if (!senderId || !query) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-
   try {
-    // Set typing indicator
+    let body = req.body;
+    let senderId = body.senderId;
+    let query = body.query;
     await setTypingOn(senderId);
-
-    // Get AI response
-    const result = await chatCompletion(query);
-    
-    if (!result || !result.response) {
-      throw new Error('No response from AI');
-    }
-
-    // Send the message
+    let result = await chatCompletion(query, senderId);
     await sendMessage(senderId, result.response);
-    
-    // Log successful interaction
-    console.log(`Sent response to ${senderId}:`, result.response);
-    
-    res.status(200).json({ success: true });
+    await setTypingOff(senderId);
+    console.log(senderId);
+    console.log(result.response);
   } catch (error) {
-    console.error('Error in sendMessage route:', error);
-    
-    // Try to send an error message to the user
-    try {
-      await sendMessage(senderId, "I apologize, but I'm having trouble processing your request right now. Please try again in a moment.");
-    } catch (sendError) {
-      console.error('Error sending error message:', sendError);
-    }
-    
-    res.status(500).json({ error: 'Internal server error' });
-  } finally {
-    // Always try to turn off typing indicator
-    try {
-      await setTypingOff(senderId);
-    } catch (typingError) {
-      console.error('Error turning off typing indicator:', typingError);
-    }
+    console.log(error);
   }
+  res.status(200).send('OK');
 });
 
 module.exports = {
