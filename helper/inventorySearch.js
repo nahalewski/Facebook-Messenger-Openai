@@ -7,35 +7,32 @@ async function searchInventory(query) {
     let browser = null;
     
     try {
+        // Configure chrome to work in serverless environment
         browser = await puppeteer.launch({
-            args: [
-                ...chromium.args,
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-gpu',
-                '--disable-dev-shm-usage',
-                '--single-process'
-            ],
+            args: chromium.args,
             defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath(),
-            headless: true,
+            executablePath: process.env.CHROME_EXECUTABLE_PATH || await chromium.executablePath(),
+            headless: chromium.headless,
             ignoreHTTPSErrors: true
         });
 
         const page = await browser.newPage();
         
-        // Set a reasonable viewport
-        await page.setViewport({ width: 1280, height: 800 });
-
-        // Set user agent to avoid detection
+        // Set user agent
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
 
         // Navigate to the inventory search page
         const searchUrl = `${DEALERSHIP_URL}/new-inventory/index.htm?search=${encodeURIComponent(query)}`;
-        await page.goto(searchUrl, { 
-            waitUntil: 'networkidle0',
-            timeout: 30000 
-        });
+        
+        try {
+            await page.goto(searchUrl, { 
+                waitUntil: 'networkidle0',
+                timeout: 30000 
+            });
+        } catch (error) {
+            console.error('Navigation error:', error);
+            throw new Error('Failed to load the inventory page');
+        }
 
         // Wait for the inventory items to load
         await page.waitForSelector('.inventory-items', { timeout: 10000 }).catch(() => null);
@@ -94,7 +91,11 @@ async function searchInventory(query) {
     } catch (error) {
         console.error('Error searching inventory:', error);
         if (browser) {
-            await browser.close();
+            try {
+                await browser.close();
+            } catch (closeError) {
+                console.error('Error closing browser:', closeError);
+            }
         }
         return {
             success: false,
