@@ -1,48 +1,72 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium');
 
 const DEALERSHIP_URL = 'https://www.johnsoncitynissan.com';
 
 async function searchInventory(query) {
-    const browser = await puppeteer.launch({
-        headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-
+    let browser = null;
+    
     try {
+        browser = await puppeteer.launch({
+            args: [
+                ...chromium.args,
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-gpu',
+                '--disable-dev-shm-usage',
+                '--single-process'
+            ],
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath(),
+            headless: true,
+            ignoreHTTPSErrors: true
+        });
+
         const page = await browser.newPage();
         
         // Set a reasonable viewport
         await page.setViewport({ width: 1280, height: 800 });
 
+        // Set user agent to avoid detection
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+
         // Navigate to the inventory search page
         const searchUrl = `${DEALERSHIP_URL}/new-inventory/index.htm?search=${encodeURIComponent(query)}`;
-        await page.goto(searchUrl, { waitUntil: 'networkidle0' });
+        await page.goto(searchUrl, { 
+            waitUntil: 'networkidle0',
+            timeout: 30000 
+        });
 
         // Wait for the inventory items to load
-        await page.waitForSelector('.vehicle-card', { timeout: 10000 }).catch(() => null);
+        await page.waitForSelector('.inventory-items', { timeout: 10000 }).catch(() => null);
 
         // Extract vehicle information
         const vehicles = await page.evaluate(() => {
             const results = [];
-            const cards = document.querySelectorAll('.vehicle-card');
+            const items = document.querySelectorAll('.inventory-item');
 
-            cards.forEach(card => {
+            items.forEach(item => {
                 try {
-                    const title = card.querySelector('.vehicle-card-title')?.textContent.trim() || '';
-                    const price = card.querySelector('.price')?.textContent.trim() || '';
-                    const mileage = card.querySelector('.mileage')?.textContent.trim() || '';
-                    const vin = card.querySelector('.vin')?.textContent.trim() || '';
-                    const imageUrl = card.querySelector('img')?.src || '';
-                    const link = card.querySelector('a')?.href || '';
+                    const title = item.querySelector('.title')?.textContent.trim() || '';
+                    const price = item.querySelector('.price')?.textContent.trim() || '';
+                    const mileage = item.querySelector('.mileage')?.textContent.trim() || '';
+                    const vin = item.querySelector('.vin')?.textContent.trim() || '';
+                    const imageUrl = item.querySelector('img')?.src || '';
+                    const link = item.querySelector('a.vehicle-details')?.href || '';
+                    const stockNumber = item.querySelector('.stock')?.textContent.trim() || '';
 
-                    results.push({
-                        title,
-                        price,
-                        mileage,
-                        vin,
-                        imageUrl,
-                        link
-                    });
+                    // Only add if we have at least a title
+                    if (title) {
+                        results.push({
+                            title,
+                            price,
+                            mileage,
+                            vin,
+                            imageUrl,
+                            link,
+                            stockNumber
+                        });
+                    }
                 } catch (error) {
                     console.error('Error extracting vehicle data:', error);
                 }
@@ -56,23 +80,25 @@ async function searchInventory(query) {
         if (vehicles.length === 0) {
             return {
                 success: true,
-                message: 'No vehicles found matching your criteria.',
+                message: 'I searched our current inventory but couldn\'t find any exact matches. Would you like me to help you find similar vehicles or would you like to schedule a time to visit our dealership?',
                 vehicles: []
             };
         }
 
         return {
             success: true,
-            message: `Found ${vehicles.length} vehicles matching your search:`,
+            message: `I found ${vehicles.length} vehicles that might interest you:`,
             vehicles
         };
 
     } catch (error) {
         console.error('Error searching inventory:', error);
-        await browser.close();
+        if (browser) {
+            await browser.close();
+        }
         return {
             success: false,
-            message: 'Unable to search inventory at this time. Please try again later or visit our website directly.',
+            message: 'I\'m currently unable to access our live inventory system. However, I\'d be happy to schedule an appointment for you to visit our dealership and see our available vehicles in person. Would you like me to help you schedule a visit?',
             vehicles: []
         };
     }
@@ -85,7 +111,7 @@ function formatVehicleResults(searchResults) {
     }
 
     if (searchResults.vehicles.length === 0) {
-        return 'I apologize, but I couldn\'t find any vehicles matching your criteria in our current inventory. Would you like to search for something else or schedule a time to visit our dealership?';
+        return searchResults.message;
     }
 
     let message = `${searchResults.message}\n\n`;
@@ -93,12 +119,17 @@ function formatVehicleResults(searchResults) {
         message += `${index + 1}. ${vehicle.title}\n`;
         if (vehicle.price) message += `   Price: ${vehicle.price}\n`;
         if (vehicle.mileage) message += `   Mileage: ${vehicle.mileage}\n`;
+        if (vehicle.stockNumber) message += `   Stock #: ${vehicle.stockNumber}\n`;
         if (vehicle.vin) message += `   VIN: ${vehicle.vin}\n`;
         if (vehicle.link) message += `   More info: ${vehicle.link}\n`;
         message += '\n';
     });
 
-    message += '\nWould you like more information about any of these vehicles or would you like to schedule a test drive?';
+    message += '\nWould you like to:\n';
+    message += '1. Schedule a test drive for any of these vehicles?\n';
+    message += '2. Get more information about a specific vehicle?\n';
+    message += '3. See different vehicles?\n';
+    
     return message;
 }
 
