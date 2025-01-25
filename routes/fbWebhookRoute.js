@@ -29,22 +29,51 @@ const callSendMessage = async (url, senderId, query) => {
       query: query
     }
   };
-  await axios.request(options)
+  try {
+    await axios.request(options);
+  } catch (error) {
+    console.error('Error calling send message:', error.message);
+  }
 }
 
 router.post('/', async (req, res) => {
   try {
     let body = req.body;
-    let senderId = body.entry[0].messaging[0].sender.id;
-    let query = body.entry[0].messaging[0].message.text;
-    const host = req.hostname;
-    let requestUrl = `https://${host}/sendMessage`;
-    callSendMessage(requestUrl, senderId, query)
-    console.log(senderId, query);
+    
+    // Return a 200 OK response immediately to acknowledge receipt
+    res.status(200).send('OK');
+    
+    // Check if this is a page webhook event
+    if (body.object !== 'page') {
+      return;
+    }
+
+    // Iterate over each entry - there may be multiple if batched
+    for (const entry of body.entry) {
+      // Iterate over each messaging event
+      for (const webhookEvent of entry.messaging) {
+        console.log('Received webhook event:', webhookEvent);
+
+        // Skip if this is not a message event or if message doesn't have text
+        if (!webhookEvent.message || !webhookEvent.message.text) {
+          continue;
+        }
+
+        let senderId = webhookEvent.sender.id;
+        let query = webhookEvent.message.text;
+        
+        // Only process if we have both sender ID and message text
+        if (senderId && query) {
+          console.log(`Processing message from ${senderId}: ${query}`);
+          const host = req.hostname;
+          let requestUrl = `https://${host}/sendMessage`;
+          await callSendMessage(requestUrl, senderId, query);
+        }
+      }
+    }
   } catch (error) {
-    console.log(error);
+    console.error('Error processing webhook:', error);
   }
-  res.status(200).send('OK');
 });
 
 module.exports = {
