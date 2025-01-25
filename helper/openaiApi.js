@@ -476,7 +476,6 @@ const chatCompletion = async (prompt, userId) => {
         if (searchMatch) {
             console.log('Vehicle search detected:', searchMatch[0]);
             const searchResults = await searchInventory(searchMatch[0]);
-            const formattedResults = formatSearchResults(searchResults);
             
             if (!conversationHistory.has(userId)) {
                 initializeConversation(userId, currentDate, currentTime);
@@ -484,12 +483,12 @@ const chatCompletion = async (prompt, userId) => {
             const messages = conversationHistory.get(userId);
             messages.push({ 
                 role: "assistant", 
-                content: formattedResults 
+                content: searchResults 
             });
             
             return {
                 status: 1,
-                response: formattedResults
+                response: searchResults
             };
         }
 

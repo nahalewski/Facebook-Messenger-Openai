@@ -232,5 +232,7 @@ const formatNoResultsResponse = (isUsed, isCPO) => {
 };
 
 module.exports = {
-    searchInventory
+    searchInventory,
+    formatSearchResults,
+    formatNoResultsResponse
 };
