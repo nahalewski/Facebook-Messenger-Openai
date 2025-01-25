@@ -184,55 +184,58 @@ const formatSearchResults = (vehicles, isUsed, isCPO) => {
         return formatNoResultsResponse(isUsed, isCPO);
     }
 
-    const inventoryType = isCPO ? 'Certified Pre-Owned' : 
-                         isUsed ? 'Pre-Owned' : 'New';
-    
-    let response = `Here are the ${inventoryType} vehicles I found:\n\n`;
+    const inventoryType = isCPO ? 'certified' : isUsed ? 'pre-owned' : 'new';
+    let response = `Great news! I found some ${inventoryType} vehicles that I think you'll love:\n\n`;
 
     vehicles.forEach((vehicle, index) => {
         response += `${index + 1}. ${vehicle.title}\n`;
-        if (vehicle.price) response += `   Price: ${vehicle.price}\n`;
-        if (vehicle.mileage && (isUsed || isCPO)) response += `   Mileage: ${vehicle.mileage}\n`;
-        if (vehicle.vin) response += `   VIN: ${vehicle.vin}\n`;
+        if (vehicle.mileage && (isUsed || isCPO)) {
+            response += `   • ${vehicle.mileage}\n`;
+        }
         
         // Add relevant details if available
-        const details = Object.entries(vehicle.details)
-            .filter(([_, value]) => value)
-            .map(([key, value]) => `${key.charAt(0).toUpperCase() + key.slice(1)}: ${value}`);
+        const details = [];
+        if (vehicle.details.exterior) details.push(`${vehicle.details.exterior} exterior`);
+        if (vehicle.details.interior) details.push(`${vehicle.details.interior} interior`);
+        if (vehicle.details.transmission) details.push(vehicle.details.transmission);
+        if (vehicle.details.engine) details.push(vehicle.details.engine);
         
         if (details.length > 0) {
-            response += `   Specifications:\n`;
-            details.forEach(detail => response += `   - ${detail}\n`);
+            response += `   • ${details.join(' • ')}\n`;
         }
-
-        if (vehicle.detailUrl) response += `   More details: ${vehicle.detailUrl}\n`;
         response += '\n';
     });
 
-    response += `\nWould you like to:\n`;
-    response += `1. Schedule a test drive for any of these vehicles?\n`;
-    response += `2. Get more specific information about any vehicle?\n`;
-    response += `3. See different vehicles?\n\n`;
-    response += `You can also call Johnson City Nissan at (423) 282-2221 for immediate assistance.`;
+    response += `I'd love to schedule a time for you to come see any of these vehicles in person. `;
+    response += `We're currently offering special deals on ${inventoryType} models, and I can make sure you get the best possible offer. `;
+    response += `When would be a good time for you to stop by for a test drive?`;
 
     return response;
 };
 
 const formatNoResultsResponse = (isUsed, isCPO) => {
-    const inventoryType = isCPO ? 'Certified Pre-Owned' : 
-                         isUsed ? 'pre-owned' : 'new';
+    const inventoryType = isCPO ? 'certified' : isUsed ? 'pre-owned' : 'new';
     
-    let response = `I apologize, but I couldn't find any ${inventoryType} vehicles matching your search criteria.\n\n`;
-    response += `Would you like to:\n`;
-    response += `1. Search our ${isUsed ? 'new' : 'pre-owned'} inventory instead?\n`;
-    response += `2. Broaden your search criteria?\n`;
-    response += `3. Be notified when matching vehicles become available?\n\n`;
-    response += `You can also call Johnson City Nissan at (423) 282-2221 to speak with our team about your specific requirements.`;
+    let response = `I'm currently checking our incoming inventory for the exact ${inventoryType} vehicle you're looking for. `;
+    response += `We get new arrivals daily, and I'd be happy to notify you as soon as we get something that matches your preferences. `;
+    response += `\n\nIn the meantime, would you like to:\n`;
+    response += `• See some similar vehicles that just arrived?\n`;
+    response += `• Get notified when your perfect match arrives?\n`;
+    response += `• Schedule a visit to explore other options in person?\n\n`;
+    response += `I'm here to help you find exactly what you're looking for!`;
+    return response;
+};
+
+const handleVoucherRequest = () => {
+    let response = `You're in luck! I can definitely help you get the best possible deal. `;
+    response += `Let's schedule a time for you to come in, and I'll make sure you're taken care of. `;
+    response += `We have some amazing offers available right now. When would be a good time for you to visit?`;
     return response;
 };
 
 module.exports = {
     searchInventory,
     formatSearchResults,
-    formatNoResultsResponse
+    formatNoResultsResponse,
+    handleVoucherRequest
 };
