@@ -506,7 +506,12 @@ const chatCompletion = async (prompt, userId) => {
 
         const response = await openai.chat.completions.create({
             messages: limitedMessages,
-            model: "gpt-3.5-turbo",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 500,
+            top_p: 0.9,
+            frequency_penalty: 0.2,
+            presence_penalty: 0.2
         });
 
         const assistantMessage = response.choices[0].message;
@@ -518,6 +523,35 @@ const chatCompletion = async (prompt, userId) => {
         };
     } catch (error) {
         console.error('Error in chatCompletion:', error);
+        
+        // If GPT-4 fails, fallback to GPT-3.5-turbo
+        if (error.message?.includes('gpt-4')) {
+            try {
+                const messages = conversationHistory.get(userId);
+                const limitedMessages = messages.slice(-10);
+                
+                const fallbackResponse = await openai.chat.completions.create({
+                    messages: limitedMessages,
+                    model: "gpt-3.5-turbo",
+                    temperature: 0.7,
+                    max_tokens: 500,
+                    top_p: 0.9,
+                    frequency_penalty: 0.2,
+                    presence_penalty: 0.2
+                });
+
+                const assistantMessage = fallbackResponse.choices[0].message;
+                messages.push(assistantMessage);
+
+                return {
+                    status: 1,
+                    response: assistantMessage.content
+                };
+            } catch (fallbackError) {
+                console.error('Fallback error:', fallbackError);
+            }
+        }
+
         return {
             status: 0,
             response: 'I apologize, but I encountered an error. Please try again or contact the dealership directly at (423) 282-2221.'
