@@ -11,13 +11,72 @@ const openai = new OpenAI({
 });
 
 // Configure email transporter
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_APP_PASSWORD
-  }
-});
+const emailConfig = {
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT) || 587,
+    secure: process.env.EMAIL_SECURE === 'true',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_APP_PASSWORD
+    }
+};
+
+const transporter = nodemailer.createTransport(emailConfig);
+
+const sendAppointmentEmail = async (appointmentDetails) => {
+    try {
+        const dealershipEmail = process.env.EMAIL_RECIPIENT;
+        if (!dealershipEmail) {
+            console.error('Dealership email not configured');
+            return;
+        }
+
+        // Email to dealership
+        const dealershipMailOptions = {
+            from: process.env.EMAIL_USER,
+            to: dealershipEmail,
+            subject: `New Appointment: ${appointmentDetails.service}`,
+            html: `
+                <h2>New Appointment Scheduled</h2>
+                <p><strong>Service:</strong> ${appointmentDetails.service}</p>
+                <p><strong>Customer Name:</strong> ${appointmentDetails.name}</p>
+                <p><strong>Phone:</strong> ${appointmentDetails.phone}</p>
+                <p><strong>Date/Time:</strong> ${appointmentDetails.datetime}</p>
+                ${appointmentDetails.notes ? `<p><strong>Notes:</strong> ${appointmentDetails.notes}</p>` : ''}
+            `
+        };
+
+        // Send to dealership
+        await transporter.sendMail(dealershipMailOptions);
+
+        // If customer provided email, send confirmation
+        if (appointmentDetails.email) {
+            const customerMailOptions = {
+                from: process.env.EMAIL_USER,
+                to: appointmentDetails.email,
+                subject: 'Your Appointment Confirmation',
+                html: `
+                    <h2>Your Appointment is Confirmed!</h2>
+                    <p>Thank you for scheduling with Johnson City Nissan. We're looking forward to seeing you!</p>
+                    <p><strong>Service:</strong> ${appointmentDetails.service}</p>
+                    <p><strong>Date/Time:</strong> ${appointmentDetails.datetime}</p>
+                    ${appointmentDetails.service.toLowerCase().includes('test drive') ? `
+                    <p><strong>Please Remember to Bring:</strong></p>
+                    <ul>
+                        <li>Valid driver's license</li>
+                        <li>Proof of insurance</li>
+                    </ul>
+                    ` : ''}
+                    <p>If you need to make any changes to your appointment, just let us know!</p>
+                `
+            };
+
+            await transporter.sendMail(customerMailOptions);
+        }
+    } catch (error) {
+        console.error('Error sending appointment email:', error);
+    }
+};
 
 // Store conversations for each user
 const conversationHistory = new Map();
@@ -127,10 +186,20 @@ const getNextBusinessHoursMessage = () => {
 };
 
 // Function to log appointments
-const logAppointment = (appointmentDetails) => {
+const logAppointment = async (appointmentDetails) => {
     try {
-        console.log('Current directory:', __dirname);
+        // Send email notifications
+        await sendAppointmentEmail(appointmentDetails);
         
+        // Log to console for debugging
+        console.log('Appointment logged:', {
+            service: appointmentDetails.service,
+            name: appointmentDetails.name,
+            datetime: appointmentDetails.datetime,
+            phone: appointmentDetails.phone
+        });
+        
+        // Log to file
         const logDir = path.join(__dirname, '../logs');
         const logFile = path.join(logDir, 'appointments.log');
         
@@ -142,33 +211,8 @@ const logAppointment = (appointmentDetails) => {
         const logEntry = `[${timestamp}] Name: ${appointmentDetails.name}, Phone: ${appointmentDetails.phone}, Service: ${appointmentDetails.service}, Appointment: ${appointmentDetails.datetime}\n`;
         
         fs.appendFileSync(logFile, logEntry);
-
-        // Send email notification
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: process.env.EMAIL_RECIPIENT,
-            subject: 'New Johnson City Nissan Appointment',
-            html: `
-                <h2>New Appointment Scheduled</h2>
-                <p><strong>Name:</strong> ${appointmentDetails.name}</p>
-                <p><strong>Phone:</strong> ${appointmentDetails.phone || 'Not provided'}</p>
-                <p><strong>Service Type:</strong> ${appointmentDetails.service || 'Not specified'}</p>
-                <p><strong>Date/Time:</strong> ${appointmentDetails.datetime}</p>
-                <p><strong>Vehicle Interest:</strong> ${appointmentDetails.vehicle || 'Not specified'}</p>
-                <p><em>This is an automated notification from Johnson City Nissan.</em></p>
-            `
-        };
-
-        transporter.sendMail(mailOptions, (error, info) => {
-            if (error) {
-                console.error('Email sending failed:', error);
-            } else {
-                console.log('Email notification sent:', info.response);
-            }
-        });
-
     } catch (error) {
-        console.error('Error in logAppointment:', error);
+        console.error('Error logging appointment:', error);
     }
 };
 
