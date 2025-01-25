@@ -5,6 +5,8 @@ const webApp = express();
 
 const PORT = process.env.PORT || 3000;
 
+// Serve static files from the public directory
+webApp.use(express.static('public'));
 webApp.use(express.urlencoded({ extended: true }));
 webApp.use(express.json());
 webApp.use((req, res, next) => {

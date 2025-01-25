@@ -11,7 +11,7 @@ router.post('/', async (req, res) => {
     let senderId = body.senderId;
     let query = body.query;
     await setTypingOn(senderId);
-    let result = await chatCompletion(query);
+    let result = await chatCompletion(query, senderId);
     await sendMessage(senderId, result.response);
     await setTypingOff(senderId);
     console.log(senderId);
