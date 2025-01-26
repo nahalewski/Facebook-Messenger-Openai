@@ -24,7 +24,6 @@
     "body-parser": "^1.20.2",
     "cheerio": "^1.0.0-rc.12",
     "connect-mongo": "^5.1.0",
-    "connect-redis": "^8.0.1",
     "cors": "^2.8.5",
     "csv-parse": "^5.5.3",
     "dotenv": "^16.3.1",
@@ -36,7 +35,6 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.8",
     "openai": "^4.24.1",
-    "redis": "^4.7.0",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

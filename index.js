@@ -1,39 +1,10 @@
 const express = require('express');
 const session = require('express-session');
-const { createClient } = require('redis');
-const RedisStore = require('connect-redis').default;
 require('dotenv').config();
 
 const webApp = express();
 
 const PORT = process.env.PORT || 3000;
-
-// Initialize Redis client
-const redisClient = createClient({
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
-    socket: {
-        tls: process.env.NODE_ENV === 'production',
-        rejectUnauthorized: false
-    }
-});
-
-// Handle Redis client errors
-redisClient.on('error', (err) => {
-    console.error('Redis Client Error:', err);
-});
-
-redisClient.on('connect', () => {
-    console.log('Successfully connected to Redis');
-});
-
-// Connect to Redis
-redisClient.connect().catch(console.error);
-
-// Initialize Redis store
-const redisStore = new RedisStore({
-    client: redisClient,
-    prefix: "carsource:"
-});
 
 // Set EJS as the view engine
 webApp.set('view engine', 'ejs');
@@ -46,7 +17,6 @@ webApp.use(express.json());
 
 // Session configuration
 const sessionConfig = {
-    store: redisStore,
     secret: process.env.SESSION_SECRET || 'your-secret-key',
     resave: false,
     saveUninitialized: false,
