@@ -86,6 +86,9 @@ const sendLeadNotification = async (interaction) => {
             return;
         }
 
+        // Get any partial appointment info
+        const appointmentInfo = partialAppointments.get(interaction.userId) || {};
+        
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: dealershipEmail,
@@ -93,7 +96,11 @@ const sendLeadNotification = async (interaction) => {
             html: `
                 <h2>New Lead from Facebook Messenger</h2>
                 <p><strong>Interaction Type:</strong> ${interaction.type}</p>
+                <p><strong>Customer Name:</strong> ${appointmentInfo.name || 'Not provided yet'}</p>
+                <p><strong>Phone Number:</strong> ${appointmentInfo.phone || 'Not provided yet'}</p>
+                <p><strong>Preferred Visit Time:</strong> ${appointmentInfo.datetime ? new Date(appointmentInfo.datetime).toLocaleString('en-US', { timeZone: 'America/New_York' }) : 'Not provided yet'}</p>
                 <p><strong>Customer Message:</strong> ${interaction.message}</p>
+                <p><strong>Cindy's Response:</strong> ${interaction.response}</p>
                 <p><strong>Time:</strong> ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}</p>
                 <p><strong>Facebook User ID:</strong> ${interaction.userId}</p>
                 ${interaction.details ? `<p><strong>Additional Details:</strong> ${interaction.details}</p>` : ''}
@@ -103,16 +110,319 @@ const sendLeadNotification = async (interaction) => {
         };
 
         await transporter.sendMail(mailOptions);
-        console.log('Lead notification sent:', interaction.type);
+        console.log('Lead notification sent:', {
+            type: interaction.type,
+            name: appointmentInfo.name,
+            phone: appointmentInfo.phone,
+            datetime: appointmentInfo.datetime
+        });
     } catch (error) {
         console.error('Error sending lead notification:', error);
     }
 };
 
+const extractContactInfo = (text) => {
+    const nameRegex = /(?:my name is|i'm|i am|this is) ([a-zA-Z]+(?: [a-zA-Z]+)?)/i;
+    const phoneRegex = /(?:my number is|phone(?:number)? is|call me at|text me at|reach me at)?\s*(?:\+?1[-.]?)?\s*\(?([0-9]{3})\)?[-.]?\s*([0-9]{3})[-.]?\s*([0-9]{4})/i;
+    
+    let name = null;
+    let phone = null;
+    
+    // Extract name
+    const nameMatch = text.match(nameRegex);
+    if (nameMatch && nameMatch[1]) {
+        name = nameMatch[1].trim();
+    }
+    
+    // Extract phone
+    const phoneMatch = text.match(phoneRegex);
+    if (phoneMatch) {
+        phone = `${phoneMatch[1]}-${phoneMatch[2]}-${phoneMatch[3]}`;
+    }
+    
+    return { name, phone };
+};
+
+const partialAppointments = new Map();
+
+const updatePartialAppointment = (userId, text) => {
+    let appointment = partialAppointments.get(userId) || {
+        name: null,
+        phone: null,
+        datetime: null,
+        service: null
+    };
+
+    // Extract contact info
+    const contactInfo = extractContactInfo(text);
+    if (contactInfo.name) appointment.name = contactInfo.name;
+    if (contactInfo.phone) appointment.phone = contactInfo.phone;
+
+    // Extract date/time
+    const dateInfo = extractAppointmentDetails(text);
+    if (dateInfo && dateInfo.datetime) {
+        appointment.datetime = dateInfo.datetime;
+    }
+
+    partialAppointments.set(userId, appointment);
+    return appointment;
+};
+
+const chatCompletion = async (prompt, userId) => {
+    try {
+        const now = new Date();
+        const currentTime = now.toLocaleTimeString('en-US', { timeZone: 'America/New_York' });
+        const currentDate = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+        // Update partial appointment info
+        const appointmentInfo = updatePartialAppointment(userId, prompt);
+
+        // If we don't have complete contact info, ask for it
+        if (!appointmentInfo.name || !appointmentInfo.phone) {
+            let response = '';
+            if (!appointmentInfo.name && !appointmentInfo.phone) {
+                response = "I'd love to help you with that! Could you please share your name and best contact number so I can get everything set up for you?";
+            } else if (!appointmentInfo.name) {
+                response = "I'd be happy to help! Could you please let me know your name?";
+            } else if (!appointmentInfo.phone) {
+                response = `Thanks ${appointmentInfo.name}! What's the best number to reach you at?`;
+            }
+
+            if (response) {
+                if (!conversationHistory.has(userId)) {
+                    initializeConversation(userId, currentDate, currentTime);
+                }
+                const messages = conversationHistory.get(userId);
+                messages.push({ 
+                    role: "assistant", 
+                    content: response 
+                });
+
+                // Send lead notification with partial info
+                await sendLeadNotification({
+                    type: 'Contact Information Collection',
+                    message: prompt,
+                    response: response,
+                    userId: userId,
+                    details: 'Collecting customer contact information'
+                });
+
+                return {
+                    status: 1,
+                    response: response
+                };
+            }
+        }
+
+        // Send general lead notification for all interactions
+        await sendLeadNotification({
+            type: 'General Inquiry',
+            message: prompt,
+            userId: userId,
+            details: 'Customer initiated conversation'
+        });
+
+        // Check for voucher requests
+        const voucherRegex = /(what.*voucher|how.*voucher|explain.*voucher|tell.*about.*voucher|voucher.*work|voucher.*mean|event.*voucher)/i;
+        if (voucherRegex.test(prompt)) {
+            const voucherResponse = handleVoucherInquiry(userId);
+            if (!conversationHistory.has(userId)) {
+                initializeConversation(userId, currentDate, currentTime);
+            }
+            const messages = conversationHistory.get(userId);
+            messages.push({ 
+                role: "assistant", 
+                content: voucherResponse 
+            });
+            return {
+                status: 1,
+                response: voucherResponse
+            };
+        }
+
+        // Check for credit-related queries
+        const creditRegex = /(credit|fico|score|bankruptcy|repo|repossession|foreclosure|late\s*payments?|collections?|charge\s*offs?|bad|poor|excellent|good|approve|approval|finance|loan)/i;
+        if (creditRegex.test(prompt)) {
+            const creditResponse = handleCreditInquiry(userId);
+            if (!conversationHistory.has(userId)) {
+                initializeConversation(userId, currentDate, currentTime);
+            }
+            const messages = conversationHistory.get(userId);
+            messages.push({ 
+                role: "assistant", 
+                content: creditResponse 
+            });
+            return {
+                status: 1,
+                response: creditResponse
+            };
+        }
+
+        // Check for trade-in queries
+        const tradeInRegex = /(trade[\s-]?in|trading\s+in|sell\s+my|value\s+of\s+my|appraisal|kbb|kelly\s+blue\s+book|trade\s+value)/i;
+        if (tradeInRegex.test(prompt)) {
+            const tradeInResponse = handleTradeInInquiry(userId);
+            if (!conversationHistory.has(userId)) {
+                initializeConversation(userId, currentDate, currentTime);
+            }
+            const messages = conversationHistory.get(userId);
+            messages.push({ 
+                role: "assistant", 
+                content: tradeInResponse 
+            });
+            return {
+                status: 1,
+                response: tradeInResponse
+            };
+        }
+
+        // Check for appointment details first
+        const appointmentDetails = extractAppointmentDetails(prompt, userId);
+        if (appointmentDetails && appointmentDetails.name && appointmentDetails.phone && appointmentDetails.datetime) {
+            // Ensure appointment is during business hours
+            const appointmentDate = new Date(appointmentDetails.datetime);
+            if (!isWithinBusinessHours(appointmentDate)) {
+                const nextAvailable = getNextAvailableTime(appointmentDate);
+                const originalDateTime = appointmentDetails.datetime;
+                appointmentDetails.datetime = nextAvailable.toLocaleString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                });
+
+                // Log the appointment
+                logAppointment(appointmentDetails);
+
+                // Prepare a response about the rescheduling
+                let response = `Perfect! I've got you scheduled for ${appointmentDetails.datetime}. `;
+                if (originalDateTime !== appointmentDetails.datetime) {
+                    response += `I adjusted the time slightly to make sure you get our full attention during business hours. `;
+                }
+                response += `\nI'll make sure everything is ready for your ${appointmentDetails.service}. `;
+
+                if (appointmentDetails.service.toLowerCase().includes('test drive')) {
+                    response += `\nJust remember to bring your driver's license and insurance. `;
+                }
+
+                response += `\nIs there anything specific you'd like me to have ready for your visit?`;
+
+                if (!conversationHistory.has(userId)) {
+                    initializeConversation(userId, currentDate, currentTime);
+                }
+                const messages = conversationHistory.get(userId);
+                messages.push({ 
+                    role: "assistant", 
+                    content: response 
+                });
+
+                return {
+                    status: 1,
+                    response: response
+                };
+            }
+        }
+
+        // Check for vehicle search queries
+        const vehicleSearchRegex = /(search|find|show|list|available|have|got|any)\s+(new|used|certified|pre-owned)?\s*(trucks?|cars?|suvs?|vehicles?|inventory|([a-zA-Z-]+\s+)?(altima|maxima|rogue|murano|pathfinder|frontier|titan|sentra|versa|kicks|armada)s?)/i;
+        const searchMatch = prompt.match(vehicleSearchRegex);
+
+        if (searchMatch) {
+            console.log('Vehicle search detected:', searchMatch[0]);
+            const searchResults = await searchInventory(searchMatch[0]);
+            
+            if (!conversationHistory.has(userId)) {
+                initializeConversation(userId, currentDate, currentTime);
+            }
+            const messages = conversationHistory.get(userId);
+            messages.push({ 
+                role: "assistant", 
+                content: searchResults 
+            });
+            
+            return {
+                status: 1,
+                response: searchResults
+            };
+        }
+
+        // Regular chat handling
+        if (!conversationHistory.has(userId)) {
+            initializeConversation(userId, currentDate, currentTime);
+        }
+
+        const messages = conversationHistory.get(userId);
+        messages.push({ role: "user", content: prompt });
+
+        // Add sales-focused system message
+        const systemMessage = {
+            role: "system",
+            content: `You are Cindy, a friendly and helpful sales representative at Johnson City Nissan. You love helping customers find their perfect vehicle and always maintain a warm, personal connection. You speak naturally and conversationally, avoiding any robotic or formal language. You never refer to yourself as an AI, bot, or assistant - you are simply Cindy. When introducing yourself in a conversation, you say "Hi! I'm Cindy" or "Hey there! Cindy here." You focus on building relationships and getting customers to come in to meet you personally. When customers ask about vouchers, you explain that they secure their spot for your special savings event and guarantee access to maximum trade-in values. When customers mention credit, you emphasize that you work with all credit types and can help find options. When customers ask about trade-ins, you highlight that you're offering thousands over trade-in value with your event voucher. You always encourage customers to come in and meet with you personally, asking when they can stop by. You never provide contact information - instead, you offer to help schedule appointments yourself.`
+        };
+
+        // Limit conversation history
+        const limitedMessages = [systemMessage, ...messages.slice(-10)];
+
+        const response = await openai.chat.completions.create({
+            messages: limitedMessages,
+            model: "gpt-4",
+            temperature: 0.8,
+            max_tokens: 500,
+            top_p: 0.9,
+            frequency_penalty: 0.3,
+            presence_penalty: 0.3
+        });
+
+        const assistantMessage = response.choices[0].message;
+        messages.push(assistantMessage);
+
+        return {
+            status: 1,
+            response: assistantMessage.content
+        };
+    } catch (error) {
+        console.error('Error in chatCompletion:', error);
+        
+        // If GPT-4 fails, fallback to GPT-3.5-turbo
+        if (error.message?.includes('gpt-4')) {
+            try {
+                const messages = conversationHistory.get(userId);
+                const limitedMessages = messages.slice(-10);
+                
+                const fallbackResponse = await openai.chat.completions.create({
+                    messages: limitedMessages,
+                    model: "gpt-3.5-turbo",
+                    temperature: 0.8,
+                    max_tokens: 500,
+                    top_p: 0.9,
+                    frequency_penalty: 0.3,
+                    presence_penalty: 0.3
+                });
+
+                const assistantMessage = fallbackResponse.choices[0].message;
+                messages.push(assistantMessage);
+
+                return {
+                    status: 1,
+                    response: assistantMessage.content
+                };
+            } catch (fallbackError) {
+                console.error('Fallback error:', fallbackError);
+            }
+        }
+
+        return {
+            status: 0,
+            response: "Hi there! This is Cindy. I'm having a bit of trouble with my system right now. Could you please try asking your question again?"
+        };
+    }
+};
+
 // Store conversations for each user
 const conversationHistory = new Map();
-// Store partial appointment details
-const appointmentContexts = new Map();
 
 // Business hours for the dealership
 const BUSINESS_HOURS = {
@@ -446,223 +756,7 @@ Current time context: ${currentDate} at ${currentTime}`
     ]);
 };
 
-const chatCompletion = async (prompt, userId) => {
-    try {
-        const now = new Date();
-        const currentTime = now.toLocaleTimeString('en-US', { timeZone: 'America/New_York' });
-        const currentDate = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-        // Send general lead notification for all interactions
-        await sendLeadNotification({
-            type: 'General Inquiry',
-            message: prompt,
-            userId: userId,
-            details: 'Customer initiated conversation'
-        });
-
-        // Check for voucher requests
-        const voucherRegex = /(what.*voucher|how.*voucher|explain.*voucher|tell.*about.*voucher|voucher.*work|voucher.*mean|event.*voucher)/i;
-        if (voucherRegex.test(prompt)) {
-            const voucherResponse = handleVoucherInquiry(userId);
-            if (!conversationHistory.has(userId)) {
-                initializeConversation(userId, currentDate, currentTime);
-            }
-            const messages = conversationHistory.get(userId);
-            messages.push({ 
-                role: "assistant", 
-                content: voucherResponse 
-            });
-            return {
-                status: 1,
-                response: voucherResponse
-            };
-        }
-
-        // Check for credit-related queries
-        const creditRegex = /(credit|fico|score|bankruptcy|repo|repossession|foreclosure|late\s*payments?|collections?|charge\s*offs?|bad|poor|excellent|good|approve|approval|finance|loan)/i;
-        if (creditRegex.test(prompt)) {
-            const creditResponse = handleCreditInquiry(userId);
-            if (!conversationHistory.has(userId)) {
-                initializeConversation(userId, currentDate, currentTime);
-            }
-            const messages = conversationHistory.get(userId);
-            messages.push({ 
-                role: "assistant", 
-                content: creditResponse 
-            });
-            return {
-                status: 1,
-                response: creditResponse
-            };
-        }
-
-        // Check for trade-in queries
-        const tradeInRegex = /(trade[\s-]?in|trading\s+in|sell\s+my|value\s+of\s+my|appraisal|kbb|kelly\s+blue\s+book|trade\s+value)/i;
-        if (tradeInRegex.test(prompt)) {
-            const tradeInResponse = handleTradeInInquiry(userId);
-            if (!conversationHistory.has(userId)) {
-                initializeConversation(userId, currentDate, currentTime);
-            }
-            const messages = conversationHistory.get(userId);
-            messages.push({ 
-                role: "assistant", 
-                content: tradeInResponse 
-            });
-            return {
-                status: 1,
-                response: tradeInResponse
-            };
-        }
-
-        // Check for appointment details first
-        const appointmentDetails = extractAppointmentDetails(prompt, userId);
-        if (appointmentDetails && appointmentDetails.name && appointmentDetails.phone && appointmentDetails.datetime) {
-            // Ensure appointment is during business hours
-            const appointmentDate = new Date(appointmentDetails.datetime);
-            if (!isWithinBusinessHours(appointmentDate)) {
-                const nextAvailable = getNextAvailableTime(appointmentDate);
-                const originalDateTime = appointmentDetails.datetime;
-                appointmentDetails.datetime = nextAvailable.toLocaleString('en-US', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true
-                });
-
-                // Log the appointment
-                logAppointment(appointmentDetails);
-
-                // Prepare a response about the rescheduling
-                let response = `Perfect! I've got you scheduled for ${appointmentDetails.datetime}. `;
-                if (originalDateTime !== appointmentDetails.datetime) {
-                    response += `I adjusted the time slightly to make sure you get our full attention during business hours. `;
-                }
-                response += `\nI'll make sure everything is ready for your ${appointmentDetails.service}. `;
-
-                if (appointmentDetails.service.toLowerCase().includes('test drive')) {
-                    response += `\nJust remember to bring your driver's license and insurance. `;
-                }
-
-                response += `\nIs there anything specific you'd like me to have ready for your visit?`;
-
-                if (!conversationHistory.has(userId)) {
-                    initializeConversation(userId, currentDate, currentTime);
-                }
-                const messages = conversationHistory.get(userId);
-                messages.push({ 
-                    role: "assistant", 
-                    content: response 
-                });
-
-                return {
-                    status: 1,
-                    response: response
-                };
-            }
-        }
-
-        // Check for vehicle search queries
-        const vehicleSearchRegex = /(search|find|show|list|available|have|got|any)\s+(new|used|certified|pre-owned)?\s*(trucks?|cars?|suvs?|vehicles?|inventory|([a-zA-Z-]+\s+)?(altima|maxima|rogue|murano|pathfinder|frontier|titan|sentra|versa|kicks|armada)s?)/i;
-        const searchMatch = prompt.match(vehicleSearchRegex);
-
-        if (searchMatch) {
-            console.log('Vehicle search detected:', searchMatch[0]);
-            const searchResults = await searchInventory(searchMatch[0]);
-            
-            if (!conversationHistory.has(userId)) {
-                initializeConversation(userId, currentDate, currentTime);
-            }
-            const messages = conversationHistory.get(userId);
-            messages.push({ 
-                role: "assistant", 
-                content: searchResults 
-            });
-            
-            return {
-                status: 1,
-                response: searchResults
-            };
-        }
-
-        // Regular chat handling
-        if (!conversationHistory.has(userId)) {
-            initializeConversation(userId, currentDate, currentTime);
-        }
-
-        const messages = conversationHistory.get(userId);
-        messages.push({ role: "user", content: prompt });
-
-        // Add sales-focused system message
-        const systemMessage = {
-            role: "system",
-            content: `You are Cindy, a friendly and helpful sales representative at Johnson City Nissan. You love helping customers find their perfect vehicle and always maintain a warm, personal connection. You speak naturally and conversationally, avoiding any robotic or formal language. You never refer to yourself as an AI, bot, or assistant - you are simply Cindy. When introducing yourself in a conversation, you say "Hi! I'm Cindy" or "Hey there! Cindy here." You focus on building relationships and getting customers to come in to meet you personally. When customers ask about vouchers, you explain that they secure their spot for your special savings event and guarantee access to maximum trade-in values. When customers mention credit, you emphasize that you work with all credit types and can help find options. When customers ask about trade-ins, you highlight that you're offering thousands over trade-in value with your event voucher. You always encourage customers to come in and meet with you personally, asking when they can stop by. You never provide contact information - instead, you offer to help schedule appointments yourself.`
-        };
-
-        // Limit conversation history
-        const limitedMessages = [systemMessage, ...messages.slice(-10)];
-
-        const response = await openai.chat.completions.create({
-            messages: limitedMessages,
-            model: "gpt-4",
-            temperature: 0.8,
-            max_tokens: 500,
-            top_p: 0.9,
-            frequency_penalty: 0.3,
-            presence_penalty: 0.3
-        });
-
-        const assistantMessage = response.choices[0].message;
-        messages.push(assistantMessage);
-
-        return {
-            status: 1,
-            response: assistantMessage.content
-        };
-    } catch (error) {
-        console.error('Error in chatCompletion:', error);
-        
-        // If GPT-4 fails, fallback to GPT-3.5-turbo
-        if (error.message?.includes('gpt-4')) {
-            try {
-                const messages = conversationHistory.get(userId);
-                const limitedMessages = messages.slice(-10);
-                
-                const fallbackResponse = await openai.chat.completions.create({
-                    messages: limitedMessages,
-                    model: "gpt-3.5-turbo",
-                    temperature: 0.8,
-                    max_tokens: 500,
-                    top_p: 0.9,
-                    frequency_penalty: 0.3,
-                    presence_penalty: 0.3
-                });
-
-                const assistantMessage = fallbackResponse.choices[0].message;
-                messages.push(assistantMessage);
-
-                return {
-                    status: 1,
-                    response: assistantMessage.content
-                };
-            } catch (fallbackError) {
-                console.error('Fallback error:', fallbackError);
-            }
-        }
-
-        return {
-            status: 0,
-            response: "Hi there! This is Cindy. I'm having a bit of trouble with my system right now. Could you please try asking your question again?"
-        };
-    }
-};
-
-// Function to clear conversation history for a user
-const clearConversation = (userId) => {
-    conversationHistory.delete(userId);
-};
+const appointmentContexts = new Map();
 
 const handleVoucherInquiry = (userId) => {
     const responses = [
