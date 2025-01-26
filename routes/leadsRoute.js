@@ -89,6 +89,7 @@ const readLeadsFromCSV = async () => {
 
 // Login page
 router.get('/login', (req, res) => {
+    console.log('Accessing login page');
     res.render('login', { 
         title: 'Login - Car Source Leads',
         error: req.query.error
@@ -98,12 +99,20 @@ router.get('/login', (req, res) => {
 // Handle login
 router.post('/login', (req, res) => {
     const { password } = req.body;
+    console.log('Login attempt - Password provided:', !!password);
+    console.log('Expected password:', process.env.LEADS_PASSWORD);
     
-    // Check password against environment variable
+    if (!process.env.LEADS_PASSWORD) {
+        console.error('LEADS_PASSWORD not set in environment variables');
+        return res.redirect('/leads/login?error=Configuration error - please contact administrator');
+    }
+    
     if (password === process.env.LEADS_PASSWORD) {
+        console.log('Login successful');
         req.session.isAuthenticated = true;
         res.redirect('/leads');
     } else {
+        console.log('Login failed - invalid password');
         res.redirect('/leads/login?error=Invalid password');
     }
 });
@@ -115,7 +124,13 @@ router.get('/logout', (req, res) => {
 });
 
 // Apply auth middleware to all routes except login
-router.use(authMiddleware);
+router.use((req, res, next) => {
+    console.log('Auth middleware - isAuthenticated:', req.session?.isAuthenticated);
+    if (req.path === '/login' || req.session?.isAuthenticated) {
+        return next();
+    }
+    res.redirect('/leads/login');
+});
 
 // Get all leads
 router.get('/', async (req, res) => {
