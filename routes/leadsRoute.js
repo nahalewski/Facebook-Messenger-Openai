@@ -5,6 +5,7 @@ const fs = require('fs').promises;
 const multer = require('multer');
 const csv = require('csv-parse');
 const { promisify } = require('util');
+const authMiddleware = require('../middleware/auth');
 
 // Configure multer for file upload
 const upload = multer({
@@ -73,6 +74,36 @@ const readLeadsFromCSV = async () => {
         return [];
     }
 };
+
+// Login page
+router.get('/login', (req, res) => {
+    res.render('login', { 
+        title: 'Login - Car Source Leads',
+        error: req.query.error
+    });
+});
+
+// Handle login
+router.post('/login', (req, res) => {
+    const { password } = req.body;
+    
+    // Check password against environment variable
+    if (password === process.env.LEADS_PASSWORD) {
+        req.session.isAuthenticated = true;
+        res.redirect('/leads');
+    } else {
+        res.redirect('/leads/login?error=Invalid password');
+    }
+});
+
+// Logout
+router.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.redirect('/leads/login');
+});
+
+// Apply auth middleware to all routes except login
+router.use(authMiddleware);
 
 // Get all leads
 router.get('/', async (req, res) => {
