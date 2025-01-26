@@ -457,6 +457,24 @@ const chatCompletion = async (prompt, userId) => {
             };
         }
 
+        // Check for trade-in queries
+        const tradeInRegex = /(trade[\s-]?in|trading\s+in|sell\s+my|value\s+of\s+my|appraisal|kbb|kelly\s+blue\s+book|trade\s+value)/i;
+        if (tradeInRegex.test(prompt)) {
+            const tradeInResponse = handleTradeInInquiry();
+            if (!conversationHistory.has(userId)) {
+                initializeConversation(userId, currentDate, currentTime);
+            }
+            const messages = conversationHistory.get(userId);
+            messages.push({ 
+                role: "assistant", 
+                content: tradeInResponse 
+            });
+            return {
+                status: 1,
+                response: tradeInResponse
+            };
+        }
+
         // Check for appointment details first
         const appointmentDetails = extractAppointmentDetails(prompt, userId);
         if (appointmentDetails && appointmentDetails.name && appointmentDetails.phone && appointmentDetails.datetime) {
@@ -541,7 +559,7 @@ const chatCompletion = async (prompt, userId) => {
         // Add sales-focused system message
         const systemMessage = {
             role: "system",
-            content: `You are a friendly and helpful car dealership representative. Your goal is to build rapport with customers and help them find their perfect vehicle. Be conversational and natural, avoiding overly formal language. Focus on scheduling in-person visits and test drives. When customers mention credit or financing, emphasize that you work with all credit types and can help find options. Don't mention prices unless specifically asked, and even then, emphasize the value and available deals rather than specific numbers. Never provide contact information - instead, offer to help schedule appointments yourself.`
+            content: `You are a friendly and helpful car dealership representative. Your goal is to build rapport with customers and help them find their perfect vehicle. Be conversational and natural, avoiding overly formal language. Focus on scheduling in-person visits and test drives. When customers mention credit or financing, emphasize that you work with all credit types and can help find options. When customers ask about trade-ins, emphasize that we're offering thousands over trade-in value with our event voucher and encourage them to bring their vehicle in. Don't mention prices unless specifically asked, and even then, emphasize the value and available deals rather than specific numbers. Never provide contact information - instead, offer to help schedule appointments yourself.`
         };
 
         // Limit conversation history
@@ -616,6 +634,15 @@ const handleCreditInquiry = () => {
         `Great news! We work with all credit types and have strong relationships with multiple lenders. I'd be happy to help you explore your options. When would you like to come in to discuss this in person?`,
         `You're in the right place! We have financing options for all credit situations. I can help you get started right away. Would you like to schedule a time to come in and discuss your options?`,
         `We have great relationships with many lenders and work with all credit types. I'd love to help you explore your options. When would be a good time for you to stop by?`
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
+};
+
+const handleTradeInInquiry = () => {
+    const responses = [
+        `Great news! With our event voucher, we're giving thousands over trade-in value right now. What day works best for you to bring it by?`,
+        `You're going to love this - we're offering thousands over trade-in value with our special event voucher. When would you like to bring your vehicle in for an appraisal?`,
+        `Perfect timing! Our event voucher is getting customers thousands over trade-in value. I'd love to take a look at your vehicle - which day works best for you to stop by?`
     ];
     return responses[Math.floor(Math.random() * responses.length)];
 };
