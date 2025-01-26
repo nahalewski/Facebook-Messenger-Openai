@@ -1,6 +1,5 @@
 const express = require('express');
 const session = require('express-session');
-const MongoStore = require('connect-mongo');
 require('dotenv').config();
 
 const webApp = express();
@@ -16,17 +15,11 @@ webApp.use(express.static('public'));
 webApp.use(express.urlencoded({ extended: true }));
 webApp.use(express.json());
 
-// Session configuration with MongoDB store
+// Session configuration
 const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'your-secret-key',
     resave: false,
     saveUninitialized: false,
-    store: MongoStore.create({
-        mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/carsource',
-        ttl: 24 * 60 * 60, // Session TTL (1 day)
-        autoRemove: 'native',
-        touchAfter: 24 * 3600 // Only update session once per day unless data changes
-    }),
     cookie: { 
         secure: process.env.NODE_ENV === 'production',
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
