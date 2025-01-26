@@ -26,17 +26,28 @@ const LEADS_FILE = path.join(__dirname, '../data/leads.json');
 // Convert CSV date format to ISO string
 const parseDate = (dateStr) => {
     try {
-        const [date, time] = dateStr.split(' ');
-        const [month, day, year] = date.split('/');
-        const [hours, minutes] = time.replace(/[ap]m/i, '').split(':');
-        const isPM = time.toLowerCase().includes('pm');
-        
-        let hour = parseInt(hours);
-        if (isPM && hour !== 12) hour += 12;
-        if (!isPM && hour === 12) hour = 0;
+        if (!dateStr) {
+            return new Date().toISOString();
+        }
 
-        const dateObj = new Date(year, month - 1, day, hour, parseInt(minutes));
-        return dateObj.toISOString();
+        // Try parsing as MM/DD/YYYY HH:MM AM/PM format
+        const match = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)/i);
+        if (match) {
+            const [_, month, day, year, hours, minutes, ampm] = match;
+            let hour = parseInt(hours);
+            if (ampm.toLowerCase() === 'pm' && hour !== 12) hour += 12;
+            if (ampm.toLowerCase() === 'am' && hour === 12) hour = 0;
+            return new Date(year, month - 1, day, hour, parseInt(minutes)).toISOString();
+        }
+
+        // Try parsing as ISO format
+        const isoDate = new Date(dateStr);
+        if (!isNaN(isoDate.getTime())) {
+            return isoDate.toISOString();
+        }
+
+        // If all parsing fails, return current date
+        return new Date().toISOString();
     } catch (error) {
         console.error('Error parsing date:', error);
         return new Date().toISOString();
@@ -50,7 +61,8 @@ const readLeadsFromCSV = async () => {
         const parseAsync = promisify(csv.parse);
         const records = await parseAsync(fileContent, {
             columns: true,
-            skip_empty_lines: true
+            skip_empty_lines: true,
+            trim: true
         });
 
         return records.map(record => ({
