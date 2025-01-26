@@ -4,70 +4,219 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %></title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        .table-responsive {
+        :root {
+            --primary-color: #4CAF50;
+            --hover-color: #45a049;
+            --background-color: #f5f5f5;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--background-color);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: var(--text-color);
+            margin-bottom: 20px;
+        }
+
+        .upload-section {
             margin: 20px 0;
+            padding: 20px;
+            background: #fff;
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            text-align: center;
         }
-        .lead-time {
-            white-space: nowrap;
+
+        .upload-form {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
         }
-        .lead-details {
-            max-width: 300px;
-            white-space: pre-wrap;
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .button:hover {
+            background-color: var(--hover-color);
+        }
+
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            display: none;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        .dataTables_wrapper .dataTables_filter input {
+            margin-left: 0.5em;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .dataTables_wrapper .dataTables_length select {
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            table {
+                display: block;
+                overflow-x: auto;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container-fluid">
-        <h1 class="mt-4 mb-4"><%= title %></h1>
-        <div class="table-responsive">
-            <table id="leadsTable" class="table table-striped table-bordered">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Type</th>
-                        <th>Name</th>
-                        <th>Phone</th>
-                        <th>Preferred Visit</th>
-                        <th>Message</th>
-                        <th>Response</th>
-                        <th>Details</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% leads.forEach(function(lead) { %>
-                        <tr>
-                            <td class="lead-time"><%= new Date(lead.time).toLocaleString() %></td>
-                            <td><%= lead.type %></td>
-                            <td><%= lead.name || 'Not provided' %></td>
-                            <td><%= lead.phone || 'Not provided' %></td>
-                            <td><%= lead.preferredVisit || 'Not provided' %></td>
-                            <td class="lead-details"><%= lead.message %></td>
-                            <td class="lead-details"><%= lead.response %></td>
-                            <td class="lead-details"><%= lead.details || '' %></td>
-                        </tr>
-                    <% }); %>
-                </tbody>
-            </table>
+    <div class="container">
+        <h1><%= title %></h1>
+
+        <% if (message) { %>
+            <div class="message" style="display: block;">
+                <%= message %>
+            </div>
+        <% } %>
+
+        <div class="upload-section">
+            <form action="/leads/upload" method="post" enctype="multipart/form-data" class="upload-form">
+                <div class="file-input-wrapper">
+                    <button type="button" class="button">
+                        <i class="fas fa-file-csv"></i>
+                        Choose CSV File
+                    </button>
+                    <input type="file" name="csvFile" accept=".csv" id="csvFile" onchange="updateFileName(this)">
+                </div>
+                <span id="fileName"></span>
+                <button type="submit" class="button">
+                    <i class="fas fa-upload"></i>
+                    Upload Leads
+                </button>
+            </form>
+            <p style="margin-top: 10px; color: #666;">
+                CSV should include columns: time, type, name, phone, preferredVisit, message, response, details
+            </p>
         </div>
+
+        <table id="leadsTable">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Type</th>
+                    <th>Name</th>
+                    <th>Phone</th>
+                    <th>Preferred Visit</th>
+                    <th>Message</th>
+                    <th>Response</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% leads.forEach(function(lead) { %>
+                    <tr>
+                        <td><%= new Date(lead.time).toLocaleString() %></td>
+                        <td><%= lead.type %></td>
+                        <td><%= lead.name || 'Not provided' %></td>
+                        <td><%= lead.phone || 'Not provided' %></td>
+                        <td><%= lead.preferredVisit || 'Not provided' %></td>
+                        <td><%= lead.message %></td>
+                        <td><%= lead.response %></td>
+                        <td><%= lead.details || '' %></td>
+                    </tr>
+                <% }); %>
+            </tbody>
+        </table>
     </div>
 
-    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
     <script>
         $(document).ready(function() {
             $('#leadsTable').DataTable({
-                order: [[0, 'desc']], // Sort by time descending
+                order: [[0, 'desc']],
                 pageLength: 25,
-                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
-                columnDefs: [
-                    { targets: [5, 6, 7], orderable: false } // Disable sorting for message columns
-                ]
+                responsive: true
             });
+
+            // Hide message after 5 seconds
+            setTimeout(function() {
+                $('.message').fadeOut('slow');
+            }, 5000);
         });
+
+        function updateFileName(input) {
+            const fileName = input.files[0] ? input.files[0].name : '';
+            document.getElementById('fileName').textContent = fileName;
+        }
     </script>
 </body>
 </html>
