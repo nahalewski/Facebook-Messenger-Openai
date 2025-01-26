@@ -6,9 +6,13 @@ const axios = require('axios');
 const { searchInventory, formatSearchResults } = require('./inventorySearch');
 require('dotenv').config();
 
+// Initialize OpenAI with API key
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Log OpenAI configuration status
+console.log('OpenAI API Key configured:', !!process.env.OPENAI_API_KEY);
 
 // Configure email transporter
 const emailConfig = {
@@ -432,6 +436,8 @@ const chatCompletion = async (prompt, userId) => {
             frequency_penalty: 0.3,
             presence_penalty: 0.3
         });
+
+        console.log('OpenAI API response:', response);
 
         const assistantMessage = response.choices[0].message;
         messages.push(assistantMessage);

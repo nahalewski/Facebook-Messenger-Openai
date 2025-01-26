@@ -25,25 +25,38 @@ router.get('/', (req, res) => {
 });
 
 const callSendMessage = async (senderId, query) => {
-  let options = {
-    method: 'POST',
-    url: '/sendMessage',  // Use relative URL
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    data: {
-      senderId: senderId,
-      query: query
-    }
-  };
+  console.log('Attempting to send message to AI:', { senderId, query });
   
   try {
-    console.log('Sending message to AI:', options);
+    // Get the base URL from the environment or use a default
+    const baseUrl = process.env.BASE_URL || 'http://localhost:10000';
+    const url = `${baseUrl}/sendMessage`;
+    
+    console.log('Making request to:', url);
+    
+    const options = {
+      method: 'POST',
+      url: url,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      data: {
+        senderId: senderId,
+        query: query
+      }
+    };
+
+    console.log('Request options:', JSON.stringify(options, null, 2));
+    
     const response = await axios.request(options);
-    console.log('AI response status:', response.status);
+    console.log('AI response received:', response.status, response.data);
     return response;
   } catch (error) {
-    console.error('Error calling send message:', error.response?.data || error.message);
+    console.error('Error calling send message:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
     throw error;
   }
 }
