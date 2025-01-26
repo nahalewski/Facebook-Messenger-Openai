@@ -12,6 +12,10 @@
             --hover-color: #45a049;
             --background-color: #f5f5f5;
             --text-color: #333;
+            --stage-new: #4CAF50;
+            --stage-qualified: #2196F3;
+            --stage-contacted: #FFC107;
+            --stage-intake: #9C27B0;
         }
 
         body {
@@ -22,7 +26,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             background: white;
             padding: 20px;
@@ -95,6 +99,7 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
+            font-size: 14px;
         }
 
         th, td {
@@ -106,11 +111,27 @@
         th {
             background-color: var(--primary-color);
             color: white;
+            white-space: nowrap;
         }
 
         tr:hover {
             background-color: #f5f5f5;
         }
+
+        .stage-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            color: white;
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .stage-Intake { background-color: var(--stage-intake); }
+        .stage-Qualified { background-color: var(--stage-qualified); }
+        .stage-New { background-color: var(--stage-new); }
+        .stage-Contacted { background-color: var(--stage-contacted); }
 
         .dataTables_wrapper .dataTables_filter input {
             margin-left: 0.5em;
@@ -123,6 +144,18 @@
             padding: 5px;
             border: 1px solid #ddd;
             border-radius: 4px;
+        }
+
+        .email-cell {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .details-cell {
+            max-width: 300px;
+            white-space: pre-wrap;
         }
 
         @media (max-width: 768px) {
@@ -163,20 +196,23 @@
                 </button>
             </form>
             <p style="margin-top: 10px; color: #666;">
-                CSV should include columns: time, type, name, phone, preferredVisit, message, response, details
+                CSV should include columns: Created, Name, Email, Source, Form, Channel, Stage, Owner, Labels, Phone, Secondary Phone Number
             </p>
         </div>
 
         <table id="leadsTable">
             <thead>
                 <tr>
-                    <th>Time</th>
-                    <th>Type</th>
+                    <th>Created</th>
                     <th>Name</th>
+                    <th>Email</th>
                     <th>Phone</th>
-                    <th>Preferred Visit</th>
-                    <th>Message</th>
-                    <th>Response</th>
+                    <th>Secondary Phone</th>
+                    <th>Stage</th>
+                    <th>Source</th>
+                    <th>Channel</th>
+                    <th>Owner</th>
+                    <th>Labels</th>
                     <th>Details</th>
                 </tr>
             </thead>
@@ -184,13 +220,16 @@
                 <% leads.forEach(function(lead) { %>
                     <tr>
                         <td><%= new Date(lead.time).toLocaleString() %></td>
+                        <td><%= lead.name %></td>
+                        <td class="email-cell"><%= lead.email %></td>
+                        <td><%= lead.phone %></td>
+                        <td><%= lead.secondaryPhone %></td>
+                        <td><span class="stage-badge stage-<%= lead.stage %>"><%= lead.stage %></span></td>
                         <td><%= lead.type %></td>
-                        <td><%= lead.name || 'Not provided' %></td>
-                        <td><%= lead.phone || 'Not provided' %></td>
-                        <td><%= lead.preferredVisit || 'Not provided' %></td>
-                        <td><%= lead.message %></td>
-                        <td><%= lead.response %></td>
-                        <td><%= lead.details || '' %></td>
+                        <td><%= lead.channel %></td>
+                        <td><%= lead.owner %></td>
+                        <td><%= lead.labels %></td>
+                        <td class="details-cell"><%= lead.details %></td>
                     </tr>
                 <% }); %>
             </tbody>
@@ -204,10 +243,12 @@
             $('#leadsTable').DataTable({
                 order: [[0, 'desc']],
                 pageLength: 25,
-                responsive: true
+                responsive: true,
+                columnDefs: [
+                    { targets: [2, 10], orderable: false }
+                ]
             });
 
-            // Hide message after 5 seconds
             setTimeout(function() {
                 $('.message').fadeOut('slow');
             }, 5000);

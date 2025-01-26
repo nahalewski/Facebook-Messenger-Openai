@@ -18,31 +18,66 @@ const upload = multer({
     }
 });
 
-// Store leads in a JSON file
+// CSV file path
+const CSV_FILE = path.join(__dirname, '../../leads.csv');
 const LEADS_FILE = path.join(__dirname, '../data/leads.json');
 
-// Ensure leads directory exists
-const ensureLeadsFile = async () => {
+// Convert CSV date format to ISO string
+const parseDate = (dateStr) => {
     try {
-        const dir = path.dirname(LEADS_FILE);
-        await fs.mkdir(dir, { recursive: true });
-        try {
-            await fs.access(LEADS_FILE);
-        } catch {
-            await fs.writeFile(LEADS_FILE, JSON.stringify([], null, 2));
-        }
+        const [date, time] = dateStr.split(' ');
+        const [month, day, year] = date.split('/');
+        const [hours, minutes] = time.replace(/[ap]m/i, '').split(':');
+        const isPM = time.toLowerCase().includes('pm');
+        
+        let hour = parseInt(hours);
+        if (isPM && hour !== 12) hour += 12;
+        if (!isPM && hour === 12) hour = 0;
+
+        const dateObj = new Date(year, month - 1, day, hour, parseInt(minutes));
+        return dateObj.toISOString();
     } catch (error) {
-        console.error('Error ensuring leads file:', error);
+        console.error('Error parsing date:', error);
+        return new Date().toISOString();
     }
 };
 
-// Initialize leads file
-ensureLeadsFile();
+// Read leads from CSV
+const readLeadsFromCSV = async () => {
+    try {
+        const fileContent = await fs.readFile(CSV_FILE, 'utf-8');
+        const parseAsync = promisify(csv.parse);
+        const records = await parseAsync(fileContent, {
+            columns: true,
+            skip_empty_lines: true
+        });
+
+        return records.map(record => ({
+            time: parseDate(record.Created),
+            type: record.Source || 'Organic',
+            name: record.Name || 'Not provided',
+            phone: record.Phone || 'Not provided',
+            email: record.Email || 'Not provided',
+            channel: record.Channel || 'Not specified',
+            stage: record.Stage || 'Intake',
+            owner: record.Owner || 'Unassigned',
+            labels: record.Labels || '',
+            secondaryPhone: record['Secondary Phone Number'] || '',
+            form: record.Form || '',
+            message: '',
+            response: '',
+            details: `Source: ${record.Source || 'Organic'}, Channel: ${record.Channel || 'Not specified'}, Stage: ${record.Stage || 'Intake'}`
+        }));
+    } catch (error) {
+        console.error('Error reading CSV:', error);
+        return [];
+    }
+};
 
 // Get all leads
 router.get('/', async (req, res) => {
     try {
-        const leads = JSON.parse(await fs.readFile(LEADS_FILE, 'utf8'));
+        const leads = await readLeadsFromCSV();
         res.render('leads', { 
             title: 'Car Source Leads',
             leads: leads,
@@ -57,7 +92,7 @@ router.get('/', async (req, res) => {
 // API endpoint to get leads as JSON
 router.get('/api/leads', async (req, res) => {
     try {
-        const leads = JSON.parse(await fs.readFile(LEADS_FILE, 'utf8'));
+        const leads = await readLeadsFromCSV();
         res.json(leads);
     } catch (error) {
         console.error('Error reading leads:', error);
@@ -72,34 +107,9 @@ router.post('/upload', upload.single('csvFile'), async (req, res) => {
     }
 
     try {
-        const parseAsync = promisify(csv.parse);
-        const records = await parseAsync(req.file.buffer, {
-            columns: true,
-            skip_empty_lines: true
-        });
-
-        let existingLeads = [];
-        try {
-            existingLeads = JSON.parse(await fs.readFile(LEADS_FILE, 'utf8'));
-        } catch (error) {
-            console.error('Error reading existing leads:', error);
-        }
-
-        const newLeads = records.map(record => ({
-            time: record.time || new Date().toISOString(),
-            type: record.type || 'Imported Lead',
-            name: record.name || 'Not provided',
-            phone: record.phone || 'Not provided',
-            preferredVisit: record.preferredVisit || 'Not provided',
-            message: record.message || '',
-            response: record.response || '',
-            details: record.details || 'Imported from CSV'
-        }));
-
-        const updatedLeads = [...existingLeads, ...newLeads];
-        await fs.writeFile(LEADS_FILE, JSON.stringify(updatedLeads, null, 2));
-
-        res.redirect('/leads?message=Successfully imported ' + newLeads.length + ' leads');
+        // Copy uploaded file to root directory
+        await fs.writeFile(CSV_FILE, req.file.buffer);
+        res.redirect('/leads?message=Successfully updated leads file');
     } catch (error) {
         console.error('Error processing CSV:', error);
         res.redirect('/leads?message=Error processing CSV file');
