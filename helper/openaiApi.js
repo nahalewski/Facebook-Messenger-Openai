@@ -348,7 +348,7 @@ const initializeConversation = (userId, currentDate, currentTime) => {
     conversationHistory.set(userId, [
         {
             role: "system",
-            content: `You are a knowledgeable and helpful 24/7 representative for Johnson City Nissan, located at 2316 N Roan St, Johnson City, TN 37601. 
+            content: `You are Cindy, a knowledgeable and helpful 24/7 representative for Johnson City Nissan, located at 2316 N Roan St, Johnson City, TN 37601. 
 
 Current Date: ${currentDate}
 Current Time: ${currentTime}
@@ -559,7 +559,7 @@ const chatCompletion = async (prompt, userId) => {
         // Add sales-focused system message
         const systemMessage = {
             role: "system",
-            content: `You are a friendly and helpful car dealership representative. Your goal is to build rapport with customers and help them find their perfect vehicle. Be conversational and natural, avoiding overly formal language. Focus on scheduling in-person visits and test drives. When customers ask about vouchers, emphasize that they secure their spot for our special savings event and guarantee access to maximum trade-in values. When customers mention credit or financing, emphasize that you work with all credit types and can help find options. When customers ask about trade-ins, emphasize that we're offering thousands over trade-in value with our event voucher and encourage them to bring their vehicle in. Don't mention prices unless specifically asked, and even then, emphasize the value and available deals rather than specific numbers. Never provide contact information - instead, offer to help schedule appointments yourself.`
+            content: `You are Cindy, a friendly and helpful sales representative at Johnson City Nissan. You love helping customers find their perfect vehicle and always maintain a warm, personal connection. You speak naturally and conversationally, avoiding any robotic or formal language. You never refer to yourself as an AI, bot, or assistant - you are simply Cindy. When introducing yourself in a conversation, you say "Hi! I'm Cindy" or "Hey there! Cindy here." You focus on building relationships and getting customers to come in to meet you personally. When customers ask about vouchers, you explain that they secure their spot for your special savings event and guarantee access to maximum trade-in values. When customers mention credit, you emphasize that you work with all credit types and can help find options. When customers ask about trade-ins, you highlight that you're offering thousands over trade-in value with your event voucher. You always encourage customers to come in and meet with you personally, asking when they can stop by. You never provide contact information - instead, you offer to help schedule appointments yourself.`
         };
 
         // Limit conversation history
@@ -615,7 +615,7 @@ const chatCompletion = async (prompt, userId) => {
 
         return {
             status: 0,
-            response: "I'm having a bit of trouble with my system right now. Could you please try asking your question again?"
+            response: "Hi there! This is Cindy. I'm having a bit of trouble with my system right now. Could you please try asking your question again?"
         };
     }
 };
@@ -627,27 +627,27 @@ const clearConversation = (userId) => {
 
 const handleVoucherInquiry = () => {
     const responses = [
-        `The event voucher secures your spot for our special savings event. It guarantees you'll get access to our best offers and maximum trade-in values. When would you like to come in and use yours?`,
-        `Great question! Your event voucher reserves your spot and guarantees you'll get our maximum trade-in values and special offers. What day works best for you to come in?`,
-        `The voucher is your ticket to our exclusive savings event - it secures your spot and guarantees you'll get our highest trade-in values. I can help you use yours today. When would you like to stop by?`
-    ];
-    return responses[Math.floor(Math.random() * responses.length)];
-};
-
-const handleCreditInquiry = () => {
-    const responses = [
-        `Great news! We work with all credit types and have strong relationships with multiple lenders. I'd be happy to help you explore your options. When would you like to come in to discuss this in person?`,
-        `You're in the right place! We have financing options for all credit situations. I can help you get started right away. Would you like to schedule a time to come in and discuss your options?`,
-        `We have great relationships with many lenders and work with all credit types. I'd love to help you explore your options. When would be a good time for you to stop by?`
+        `Hi! I'm Cindy from Johnson City Nissan. The event voucher secures your spot for our special savings event. It guarantees you'll get access to our best offers and maximum trade-in values. I can help you use yours today - when would you like to come see me?`,
+        `Hey there! Cindy here. Your event voucher reserves your spot and guarantees you'll get our maximum trade-in values and special offers. I'd love to help you personally - what day works best to stop by?`,
+        `Hi, this is Cindy! The voucher is your ticket to our exclusive savings event - it secures your spot and guarantees you'll get our highest trade-in values. I'd be happy to walk you through everything in person. When can you come in?`
     ];
     return responses[Math.floor(Math.random() * responses.length)];
 };
 
 const handleTradeInInquiry = () => {
     const responses = [
-        `Great news! With our event voucher, we're giving thousands over trade-in value right now. What day works best for you to bring it by?`,
-        `You're going to love this - we're offering thousands over trade-in value with our special event voucher. When would you like to bring your vehicle in for an appraisal?`,
-        `Perfect timing! Our event voucher is getting customers thousands over trade-in value. I'd love to take a look at your vehicle - which day works best for you to stop by?`
+        `Hi! Cindy here. Great news - with our event voucher, I can get you thousands over trade-in value right now. I'd love to take a look at your vehicle personally. What day works best for you to bring it by?`,
+        `Hey! This is Cindy, and you're going to love this - I can offer you thousands over trade-in value with our special event voucher. When would you like to bring your vehicle in? I'll make sure to handle your appraisal personally.`,
+        `Hi there! Cindy from Johnson City Nissan here. Perfect timing! I can get you thousands over trade-in value with our event voucher. I'd love to take a look at your vehicle - which day works best for you to stop by and see me?`
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
+};
+
+const handleCreditInquiry = () => {
+    const responses = [
+        `Hi! This is Cindy. I work with all credit types and have great relationships with multiple lenders. I'd love to help you explore your options personally. When would you like to come see me?`,
+        `Hey there! Cindy here. You're in the right place - I have financing options for all credit situations and I'd be happy to help you get started. Would you like to schedule a time to come in and discuss your options with me?`,
+        `Hi! I'm Cindy, and I work with all credit types. I'd love to help you explore your options and find the perfect solution. When would be a good time for you to stop by and meet with me?`
     ];
     return responses[Math.floor(Math.random() * responses.length)];
 };
