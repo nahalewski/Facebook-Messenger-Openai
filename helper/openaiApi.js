@@ -439,6 +439,24 @@ const chatCompletion = async (prompt, userId) => {
             };
         }
 
+        // Check for credit-related queries
+        const creditRegex = /(credit|fico|score|bankruptcy|repo|repossession|foreclosure|late\s*payments?|collections?|charge\s*offs?|bad|poor|excellent|good|approve|approval|finance|loan)/i;
+        if (creditRegex.test(prompt)) {
+            const creditResponse = handleCreditInquiry();
+            if (!conversationHistory.has(userId)) {
+                initializeConversation(userId, currentDate, currentTime);
+            }
+            const messages = conversationHistory.get(userId);
+            messages.push({ 
+                role: "assistant", 
+                content: creditResponse 
+            });
+            return {
+                status: 1,
+                response: creditResponse
+            };
+        }
+
         // Check for appointment details first
         const appointmentDetails = extractAppointmentDetails(prompt, userId);
         if (appointmentDetails && appointmentDetails.name && appointmentDetails.phone && appointmentDetails.datetime) {
@@ -523,7 +541,7 @@ const chatCompletion = async (prompt, userId) => {
         // Add sales-focused system message
         const systemMessage = {
             role: "system",
-            content: `You are a friendly and helpful car dealership representative. Your goal is to build rapport with customers and help them find their perfect vehicle. Be conversational and natural, avoiding overly formal language. Focus on scheduling in-person visits and test drives. Don't mention prices unless specifically asked, and even then, emphasize the value and available deals rather than specific numbers. Never provide contact information - instead, offer to help schedule appointments yourself.`
+            content: `You are a friendly and helpful car dealership representative. Your goal is to build rapport with customers and help them find their perfect vehicle. Be conversational and natural, avoiding overly formal language. Focus on scheduling in-person visits and test drives. When customers mention credit or financing, emphasize that you work with all credit types and can help find options. Don't mention prices unless specifically asked, and even then, emphasize the value and available deals rather than specific numbers. Never provide contact information - instead, offer to help schedule appointments yourself.`
         };
 
         // Limit conversation history
@@ -591,6 +609,15 @@ const clearConversation = (userId) => {
 
 const handleVoucherRequest = () => {
     return `I'd be happy to help you with a voucher! Can you please provide more details about what you're looking for?`;
+};
+
+const handleCreditInquiry = () => {
+    const responses = [
+        `Great news! We work with all credit types and have strong relationships with multiple lenders. I'd be happy to help you explore your options. When would you like to come in to discuss this in person?`,
+        `You're in the right place! We have financing options for all credit situations. I can help you get started right away. Would you like to schedule a time to come in and discuss your options?`,
+        `We have great relationships with many lenders and work with all credit types. I'd love to help you explore your options. When would be a good time for you to stop by?`
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
 };
 
 module.exports = {
