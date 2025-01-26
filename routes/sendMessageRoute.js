@@ -6,9 +6,8 @@ const { chatCompletion } = require('../helper/openaiApi');
 const { sendMessage, setTypingOff, setTypingOn } = require('../helper/messengerApi');
 
 router.post('/', async (req, res) => {
-  console.log('POST /sendMessage - Received request');
   try {
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('Received message request:', req.body);
     
     let body = req.body;
     if (!body.senderId || !body.query) {
@@ -23,7 +22,6 @@ router.post('/', async (req, res) => {
 
     try {
       await setTypingOn(senderId);
-      console.log('Typing indicator turned on');
     } catch (err) {
       console.error('Error setting typing indicator:', err);
     }
@@ -32,7 +30,7 @@ router.post('/', async (req, res) => {
     try {
       console.log('Calling chatCompletion...');
       result = await chatCompletion(query, senderId);
-      console.log('ChatCompletion result:', JSON.stringify(result, null, 2));
+      console.log('ChatCompletion result:', result);
     } catch (err) {
       console.error('Error in chatCompletion:', err);
       throw err;
@@ -48,28 +46,19 @@ router.post('/', async (req, res) => {
       await sendMessage(senderId, result.response);
       console.log('Message sent successfully');
     } catch (err) {
-      console.error('Error sending message:', {
-        error: err.message,
-        response: err.response?.data,
-        status: err.response?.status
-      });
+      console.error('Error sending message:', err);
       throw err;
     }
 
     try {
       await setTypingOff(senderId);
-      console.log('Typing indicator turned off');
     } catch (err) {
       console.error('Error turning off typing indicator:', err);
     }
 
-    console.log('Request completed successfully');
     res.status(200).json({ success: true });
   } catch (error) {
-    console.error('Error in message handler:', {
-      error: error.message,
-      stack: error.stack
-    });
+    console.error('Error in message handler:', error);
     res.status(500).json({ 
       error: 'Internal server error',
       message: error.message,
