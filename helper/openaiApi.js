@@ -102,7 +102,6 @@ const sendLeadNotification = async (interaction) => {
                 <p><strong>Customer Message:</strong> ${interaction.message}</p>
                 <p><strong>Cindy's Response:</strong> ${interaction.response}</p>
                 <p><strong>Time:</strong> ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}</p>
-                <p><strong>Facebook User ID:</strong> ${interaction.userId}</p>
                 ${interaction.details ? `<p><strong>Additional Details:</strong> ${interaction.details}</p>` : ''}
                 <hr>
                 <p><em>This is an automated lead notification from Cindy at Johnson City Nissan.</em></p>
@@ -815,7 +814,16 @@ const handleCreditInquiry = (userId) => {
     return response;
 };
 
+// Function to clear conversation history for a user
+const clearConversation = (userId) => {
+    conversationHistory.delete(userId);
+    partialAppointments.delete(userId);
+};
+
 module.exports = {
     chatCompletion,
-    clearConversation
+    clearConversation,
+    extractAppointmentDetails,
+    isWithinBusinessHours,
+    getNextAvailableTime
 };
