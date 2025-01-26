@@ -422,9 +422,9 @@ const chatCompletion = async (prompt, userId) => {
         const currentDate = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
         // Check for voucher requests
-        const voucherRegex = /(voucher|coupon|discount|deal|offer|special)/i;
+        const voucherRegex = /(what.*voucher|how.*voucher|explain.*voucher|tell.*about.*voucher|voucher.*work|voucher.*mean|event.*voucher)/i;
         if (voucherRegex.test(prompt)) {
-            const voucherResponse = handleVoucherRequest();
+            const voucherResponse = handleVoucherInquiry();
             if (!conversationHistory.has(userId)) {
                 initializeConversation(userId, currentDate, currentTime);
             }
@@ -559,7 +559,7 @@ const chatCompletion = async (prompt, userId) => {
         // Add sales-focused system message
         const systemMessage = {
             role: "system",
-            content: `You are a friendly and helpful car dealership representative. Your goal is to build rapport with customers and help them find their perfect vehicle. Be conversational and natural, avoiding overly formal language. Focus on scheduling in-person visits and test drives. When customers mention credit or financing, emphasize that you work with all credit types and can help find options. When customers ask about trade-ins, emphasize that we're offering thousands over trade-in value with our event voucher and encourage them to bring their vehicle in. Don't mention prices unless specifically asked, and even then, emphasize the value and available deals rather than specific numbers. Never provide contact information - instead, offer to help schedule appointments yourself.`
+            content: `You are a friendly and helpful car dealership representative. Your goal is to build rapport with customers and help them find their perfect vehicle. Be conversational and natural, avoiding overly formal language. Focus on scheduling in-person visits and test drives. When customers ask about vouchers, emphasize that they secure their spot for our special savings event and guarantee access to maximum trade-in values. When customers mention credit or financing, emphasize that you work with all credit types and can help find options. When customers ask about trade-ins, emphasize that we're offering thousands over trade-in value with our event voucher and encourage them to bring their vehicle in. Don't mention prices unless specifically asked, and even then, emphasize the value and available deals rather than specific numbers. Never provide contact information - instead, offer to help schedule appointments yourself.`
         };
 
         // Limit conversation history
@@ -625,8 +625,13 @@ const clearConversation = (userId) => {
     conversationHistory.delete(userId);
 };
 
-const handleVoucherRequest = () => {
-    return `I'd be happy to help you with a voucher! Can you please provide more details about what you're looking for?`;
+const handleVoucherInquiry = () => {
+    const responses = [
+        `The event voucher secures your spot for our special savings event. It guarantees you'll get access to our best offers and maximum trade-in values. When would you like to come in and use yours?`,
+        `Great question! Your event voucher reserves your spot and guarantees you'll get our maximum trade-in values and special offers. What day works best for you to come in?`,
+        `The voucher is your ticket to our exclusive savings event - it secures your spot and guarantees you'll get our highest trade-in values. I can help you use yours today. When would you like to stop by?`
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
 };
 
 const handleCreditInquiry = () => {
