@@ -1,5 +1,5 @@
 const { OpenAI } = require("openai");
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
@@ -22,6 +22,53 @@ const emailConfig = {
 };
 
 const transporter = nodemailer.createTransport(emailConfig);
+
+const LEADS_FILE = path.join(__dirname, '../data/leads.json');
+
+// Ensure leads directory exists
+const ensureLeadsFile = async () => {
+    try {
+        const dir = path.dirname(LEADS_FILE);
+        await fs.mkdir(dir, { recursive: true });
+        try {
+            await fs.access(LEADS_FILE);
+        } catch {
+            await fs.writeFile(LEADS_FILE, JSON.stringify([], null, 2));
+        }
+    } catch (error) {
+        console.error('Error ensuring leads file:', error);
+    }
+};
+
+// Initialize leads file
+ensureLeadsFile();
+
+const storeLead = async (lead) => {
+    try {
+        let leads = [];
+        try {
+            const data = await fs.readFile(LEADS_FILE, 'utf8');
+            leads = JSON.parse(data);
+        } catch (error) {
+            console.error('Error reading leads file:', error);
+        }
+
+        leads.push({
+            time: new Date().toISOString(),
+            type: lead.type,
+            name: lead.name,
+            phone: lead.phone,
+            preferredVisit: lead.datetime,
+            message: lead.message,
+            response: lead.response,
+            details: lead.details
+        });
+
+        await fs.writeFile(LEADS_FILE, JSON.stringify(leads, null, 2));
+    } catch (error) {
+        console.error('Error storing lead:', error);
+    }
+};
 
 const sendAppointmentEmail = async (appointmentDetails) => {
     try {
@@ -89,6 +136,17 @@ const sendLeadNotification = async (interaction) => {
         // Get any partial appointment info
         const appointmentInfo = partialAppointments.get(interaction.userId) || {};
         
+        // Store lead in JSON file
+        await storeLead({
+            type: interaction.type,
+            name: appointmentInfo.name,
+            phone: appointmentInfo.phone,
+            datetime: appointmentInfo.datetime,
+            message: interaction.message,
+            response: interaction.response,
+            details: interaction.details
+        });
+
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: dealershipEmail,
@@ -478,7 +536,7 @@ const getNextBusinessHoursMessage = () => {
 
     // If it's before opening hours today
     if (currentHour < BUSINESS_HOURS[day].open) {
-        return `We're currently closed. We'll open today at 9:00 AM.`;
+        return `We're currently closed. We'll open today at ${BUSINESS_HOURS[day].open}:00 AM.`;
     }
 
     // If it's after closing hours
@@ -547,7 +605,7 @@ const extractAppointmentDetails = (text, userId) => {
         console.log('Current appointment context:', context);
 
         // Extract phone number
-        const phoneMatch = text.match(/(\+?1?\s*[-.]?\s*)?(\([0-9]{3}\)|[0-9]{3})[-. ]?[0-9]{3}[-. ]?[0-9]{4}/);
+        const phoneMatch = text.match(/(\+?1?\s*[-.]?)?\s*(?:\([0-9]{3}\)|[0-9]{3})[-. ]?[0-9]{3}[-. ]?[0-9]{4}/);
         if (phoneMatch && !context.phone) {
             context.phone = phoneMatch[0].replace(/[-.\s()]/g, '');
         }
