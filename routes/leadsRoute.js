@@ -87,9 +87,31 @@ const readLeadsFromCSV = async () => {
     }
 };
 
+// Authentication middleware
+const requireAuth = (req, res, next) => {
+    console.log('Auth check - Session:', req.session);
+    console.log('Auth check - isAuthenticated:', req.session?.isAuthenticated);
+    
+    if (req.path === '/login') {
+        return next();
+    }
+    
+    if (req.session && req.session.isAuthenticated) {
+        return next();
+    }
+    
+    res.redirect('/leads/login');
+};
+
+// Apply auth middleware to all routes
+router.use(requireAuth);
+
 // Login page
 router.get('/login', (req, res) => {
     console.log('Accessing login page');
+    if (req.session && req.session.isAuthenticated) {
+        return res.redirect('/leads');
+    }
     res.render('login', { 
         title: 'Login - Car Source Leads',
         error: req.query.error
@@ -108,9 +130,16 @@ router.post('/login', (req, res) => {
     }
     
     if (password === process.env.LEADS_PASSWORD) {
-        console.log('Login successful');
+        console.log('Login successful - Setting session');
         req.session.isAuthenticated = true;
-        res.redirect('/leads');
+        req.session.save((err) => {
+            if (err) {
+                console.error('Session save error:', err);
+                return res.redirect('/leads/login?error=Session error');
+            }
+            console.log('Session saved successfully');
+            res.redirect('/leads');
+        });
     } else {
         console.log('Login failed - invalid password');
         res.redirect('/leads/login?error=Invalid password');
@@ -119,22 +148,18 @@ router.post('/login', (req, res) => {
 
 // Logout
 router.get('/logout', (req, res) => {
-    req.session.destroy();
-    res.redirect('/leads/login');
-});
-
-// Apply auth middleware to all routes except login
-router.use((req, res, next) => {
-    console.log('Auth middleware - isAuthenticated:', req.session?.isAuthenticated);
-    if (req.path === '/login' || req.session?.isAuthenticated) {
-        return next();
-    }
-    res.redirect('/leads/login');
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('Logout error:', err);
+        }
+        res.redirect('/leads/login');
+    });
 });
 
 // Get all leads
 router.get('/', async (req, res) => {
     try {
+        console.log('Fetching leads - User authenticated:', req.session.isAuthenticated);
         const leads = await readLeadsFromCSV();
         res.render('leads', { 
             title: 'Car Source Leads',
@@ -165,7 +190,6 @@ router.post('/upload', upload.single('csvFile'), async (req, res) => {
     }
 
     try {
-        // Copy uploaded file to root directory
         await fs.writeFile(CSV_FILE, req.file.buffer);
         res.redirect('/leads?message=Successfully updated leads file');
     } catch (error) {

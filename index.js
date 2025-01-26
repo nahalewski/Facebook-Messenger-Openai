@@ -11,6 +11,11 @@ const PORT = process.env.PORT || 3000;
 webApp.set('view engine', 'ejs');
 webApp.set('views', './views');
 
+// Serve static files from the public directory
+webApp.use(express.static('public'));
+webApp.use(express.urlencoded({ extended: true }));
+webApp.use(express.json());
+
 // Session configuration with MongoDB store
 const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'your-secret-key',
@@ -24,8 +29,11 @@ const sessionConfig = {
     }),
     cookie: { 
         secure: process.env.NODE_ENV === 'production',
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        httpOnly: true,
+        sameSite: 'lax'
+    },
+    name: 'carsource.sid' // Custom session cookie name
 };
 
 // Use secure cookies in production
@@ -36,13 +44,11 @@ if (process.env.NODE_ENV === 'production') {
 
 webApp.use(session(sessionConfig));
 
-// Serve static files from the public directory
-webApp.use(express.static('public'));
-webApp.use(express.urlencoded({ extended: true }));
-webApp.use(express.json());
-
+// Debug middleware
 webApp.use((req, res, next) => {
     console.log(`Path ${req.path} with Method ${req.method}`);
+    console.log('Session ID:', req.sessionID);
+    console.log('Session Data:', req.session);
     next();
 });
 
