@@ -78,6 +78,37 @@ const sendAppointmentEmail = async (appointmentDetails) => {
     }
 };
 
+const sendLeadNotification = async (interaction) => {
+    try {
+        const dealershipEmail = process.env.EMAIL_RECIPIENT;
+        if (!dealershipEmail) {
+            console.error('Dealership email not configured');
+            return;
+        }
+
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: dealershipEmail,
+            subject: `New Lead: ${interaction.type}`,
+            html: `
+                <h2>New Lead from Facebook Messenger</h2>
+                <p><strong>Interaction Type:</strong> ${interaction.type}</p>
+                <p><strong>Customer Message:</strong> ${interaction.message}</p>
+                <p><strong>Time:</strong> ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}</p>
+                <p><strong>Facebook User ID:</strong> ${interaction.userId}</p>
+                ${interaction.details ? `<p><strong>Additional Details:</strong> ${interaction.details}</p>` : ''}
+                <hr>
+                <p><em>This is an automated lead notification from Cindy at Johnson City Nissan.</em></p>
+            `
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log('Lead notification sent:', interaction.type);
+    } catch (error) {
+        console.error('Error sending lead notification:', error);
+    }
+};
+
 // Store conversations for each user
 const conversationHistory = new Map();
 // Store partial appointment details
@@ -421,10 +452,18 @@ const chatCompletion = async (prompt, userId) => {
         const currentTime = now.toLocaleTimeString('en-US', { timeZone: 'America/New_York' });
         const currentDate = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
+        // Send general lead notification for all interactions
+        await sendLeadNotification({
+            type: 'General Inquiry',
+            message: prompt,
+            userId: userId,
+            details: 'Customer initiated conversation'
+        });
+
         // Check for voucher requests
         const voucherRegex = /(what.*voucher|how.*voucher|explain.*voucher|tell.*about.*voucher|voucher.*work|voucher.*mean|event.*voucher)/i;
         if (voucherRegex.test(prompt)) {
-            const voucherResponse = handleVoucherInquiry();
+            const voucherResponse = handleVoucherInquiry(userId);
             if (!conversationHistory.has(userId)) {
                 initializeConversation(userId, currentDate, currentTime);
             }
@@ -442,7 +481,7 @@ const chatCompletion = async (prompt, userId) => {
         // Check for credit-related queries
         const creditRegex = /(credit|fico|score|bankruptcy|repo|repossession|foreclosure|late\s*payments?|collections?|charge\s*offs?|bad|poor|excellent|good|approve|approval|finance|loan)/i;
         if (creditRegex.test(prompt)) {
-            const creditResponse = handleCreditInquiry();
+            const creditResponse = handleCreditInquiry(userId);
             if (!conversationHistory.has(userId)) {
                 initializeConversation(userId, currentDate, currentTime);
             }
@@ -460,7 +499,7 @@ const chatCompletion = async (prompt, userId) => {
         // Check for trade-in queries
         const tradeInRegex = /(trade[\s-]?in|trading\s+in|sell\s+my|value\s+of\s+my|appraisal|kbb|kelly\s+blue\s+book|trade\s+value)/i;
         if (tradeInRegex.test(prompt)) {
-            const tradeInResponse = handleTradeInInquiry();
+            const tradeInResponse = handleTradeInInquiry(userId);
             if (!conversationHistory.has(userId)) {
                 initializeConversation(userId, currentDate, currentTime);
             }
@@ -625,31 +664,61 @@ const clearConversation = (userId) => {
     conversationHistory.delete(userId);
 };
 
-const handleVoucherInquiry = () => {
+const handleVoucherInquiry = (userId) => {
     const responses = [
         `Hi! I'm Cindy from Johnson City Nissan. The event voucher secures your spot for our special savings event. It guarantees you'll get access to our best offers and maximum trade-in values. I can help you use yours today - when would you like to come see me?`,
         `Hey there! Cindy here. Your event voucher reserves your spot and guarantees you'll get our maximum trade-in values and special offers. I'd love to help you personally - what day works best to stop by?`,
         `Hi, this is Cindy! The voucher is your ticket to our exclusive savings event - it secures your spot and guarantees you'll get our highest trade-in values. I'd be happy to walk you through everything in person. When can you come in?`
     ];
-    return responses[Math.floor(Math.random() * responses.length)];
+    const response = responses[Math.floor(Math.random() * responses.length)];
+    
+    // Send lead notification
+    sendLeadNotification({
+        type: 'Voucher Interest',
+        message: response,
+        userId: userId,
+        details: 'Customer inquired about event voucher'
+    });
+    
+    return response;
 };
 
-const handleTradeInInquiry = () => {
+const handleTradeInInquiry = (userId) => {
     const responses = [
         `Hi! Cindy here. Great news - with our event voucher, I can get you thousands over trade-in value right now. I'd love to take a look at your vehicle personally. What day works best for you to bring it by?`,
         `Hey! This is Cindy, and you're going to love this - I can offer you thousands over trade-in value with our special event voucher. When would you like to bring your vehicle in? I'll make sure to handle your appraisal personally.`,
         `Hi there! Cindy from Johnson City Nissan here. Perfect timing! I can get you thousands over trade-in value with our event voucher. I'd love to take a look at your vehicle - which day works best for you to stop by and see me?`
     ];
-    return responses[Math.floor(Math.random() * responses.length)];
+    const response = responses[Math.floor(Math.random() * responses.length)];
+    
+    // Send lead notification
+    sendLeadNotification({
+        type: 'Trade-In Interest',
+        message: response,
+        userId: userId,
+        details: 'Customer inquired about trade-in value'
+    });
+    
+    return response;
 };
 
-const handleCreditInquiry = () => {
+const handleCreditInquiry = (userId) => {
     const responses = [
         `Hi! This is Cindy. I work with all credit types and have great relationships with multiple lenders. I'd love to help you explore your options personally. When would you like to come see me?`,
         `Hey there! Cindy here. You're in the right place - I have financing options for all credit situations and I'd be happy to help you get started. Would you like to schedule a time to come in and discuss your options with me?`,
         `Hi! I'm Cindy, and I work with all credit types. I'd love to help you explore your options and find the perfect solution. When would be a good time for you to stop by and meet with me?`
     ];
-    return responses[Math.floor(Math.random() * responses.length)];
+    const response = responses[Math.floor(Math.random() * responses.length)];
+    
+    // Send lead notification
+    sendLeadNotification({
+        type: 'Credit/Financing Interest',
+        message: response,
+        userId: userId,
+        details: 'Customer inquired about financing options'
+    });
+    
+    return response;
 };
 
 module.exports = {
