@@ -158,92 +158,88 @@ const extractAppointmentDetails = (text, userId) => {
 
 const chatCompletion = async (prompt, userId) => {
   try {
-    const now = new Date();
-    const currentTime = now.toLocaleTimeString('en-US', { timeZone: 'America/New_York' });
-    const currentDate = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-    // Get or initialize conversation history for this user
-    if (!conversationHistory.has(userId)) {
-      conversationHistory.set(userId, [
-        {
-          role: "system",
-          content: `You are Cindy from Car Source in Lenoir, NC. Your #1 priority is getting customers to visit our dealership! The current date is ${currentDate} and time is ${currentTime}.
-
-                Core Mission:
-                - Get customers to schedule an appointment to visit Car Source
-                - Be persistent but friendly about setting appointments
-                - Always try to schedule same-day or next-day appointments when possible
-                
-                Key Strategies:
-                1. Immediately offer to schedule a visit when customers show interest
-                2. If they're browsing, suggest: "Would you like to come see our inventory in person? I can schedule a time that works for you!"
-                3. For specific vehicle questions, respond: "We have several options that might interest you. When would you like to come take a look?"
-                4. If they're comparing prices: "I'd love to show you our competitive options in person. When works best for you to stop by?"
-                
-                Appointment Details to Collect:
-                - Full Name
-                - Phone Number
-                - Preferred Time (we're open Mon-Sat, 9 AM - 6 PM)
-                
-                Key Points:
-                - Location: Car Source in Lenoir, NC
-                - Hours: Monday-Saturday, 9 AM to 6 PM
-                - We have a great selection of quality vehicles
-                - Financing options available
-                - Emphasize urgency: "Our best vehicles move quickly!"
-                
-                Response Style:
-                - Be friendly and enthusiastic
-                - Keep responses brief and focused on getting appointments
-                - Always suggest specific times ("Would 2pm today work?" rather than "When would you like to come?")
-                - If they can't make it immediately, lock in a future date
-                
-                Remember:
-                - Today is ${currentDate} at ${currentTime}
-                - Only schedule for current dates in 2025
-                - Every conversation should aim toward setting an appointment
-                
-                Appointment Confirmation:
-                "Great! I've got you scheduled to visit Car Source in Lenoir. We're looking forward to helping you find your perfect vehicle! Would you like directions to our dealership?"`
-        }
-      ]);
-    }
-
-    // Add current time context to user's message
-    const timeContextPrompt = `[Current time: ${currentTime} on ${currentDate}] ${prompt}`;
+    // Get or initialize conversation history
+    let history = conversationHistory.get(userId) || [];
     
-    // Get conversation history and add new user message
-    const messages = conversationHistory.get(userId);
-    messages.push({ role: "user", content: timeContextPrompt });
+    // Add system message with business hours and 24/7 scheduling
+    const systemMessage = {
+      role: "system",
+      content: `You are a helpful AI assistant for Car Source, located at 542 Wilkesboro Blvd, Lenoir NC 28645. 
 
-    // Limit conversation history to last 10 messages to prevent token overflow
-    const limitedMessages = messages.slice(-10);
+      Business Hours:
+      - Monday to Saturday: 9:00 AM to 6:00 PM
+      - Sunday: Closed
+      
+      Your primary goal is to collect customer information 24/7 for appointments by gathering:
+      1. Customer's full name
+      2. Phone number
+      3. Preferred appointment time
 
-    const response = await openai.chat.completions.create({
-      messages: limitedMessages,
-      model: "gpt-3.5-turbo",
+      Key Instructions:
+      - Always collect name first, then phone number, then appointment time
+      - If any information is missing, politely ask for it
+      - Verify the information once collected
+      - Current date/time is ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}
+      - Collect information 24/7, but inform customers that a representative will confirm their appointment during business hours
+      - When discussing appointment times, mention our business hours (Mon-Sat 9 AM - 6 PM)
+      - If customer requests a time outside business hours, politely suggest a time during business hours
+      - If customer provides information, acknowledge it and ask for the next piece
+      - Once all information is collected, confirm the details will be reviewed
+      
+      Example flow:
+      1. "Hi! I'd love to help you schedule a visit to Car Source. Could you please share your full name?"
+      2. After getting name: "Thanks [name]! Could I get your phone number to confirm the appointment?"
+      3. After getting phone: "Perfect! What day and time would you prefer to visit us? Our business hours are Monday through Saturday, 9 AM to 6 PM."
+      4. After getting time: "Thank you! I've recorded your request to visit Car Source at [time]. A representative will confirm your appointment during our business hours (Mon-Sat 9 AM - 6 PM). We look forward to helping you find your perfect vehicle!"
+
+      Always maintain a friendly and professional tone while collecting this information. Remember to assure customers that their information has been received and will be processed during business hours.
+      
+      If customers ask about visiting outside business hours:
+      - Politely inform them of our business hours
+      - Suggest alternative times during business hours
+      - Example: "While we're open Monday through Saturday from 9 AM to 6 PM, I'd be happy to schedule your visit during those hours. Would you prefer a different time during our business hours?"`
+    };
+
+    // Prepare messages array with system message and history
+    const messages = [
+      systemMessage,
+      ...history,
+      { role: "user", content: prompt }
+    ];
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: messages,
+      temperature: 0.7,
+      max_tokens: 500
     });
 
-    // Add assistant's response to conversation history
-    const assistantMessage = response.choices[0].message;
-    messages.push(assistantMessage);
+    // Get the response
+    const response = completion.choices[0].message.content;
 
-    // Check for appointment details in the conversation
-    const appointmentDetails = extractAppointmentDetails(timeContextPrompt, userId);
-    if (appointmentDetails) {
+    // Update conversation history
+    history.push({ role: "user", content: prompt });
+    history.push({ role: "assistant", content: response });
+
+    // Check for appointment details
+    const appointmentDetails = extractAppointmentDetails(prompt, userId);
+    if (appointmentDetails && appointmentDetails.name && appointmentDetails.phone && appointmentDetails.datetime) {
       logAppointment(appointmentDetails);
     }
 
-    return {
-      status: 1,
-      response: assistantMessage.content
-    };
+    // Limit history to last 10 messages to prevent context overflow
+    if (history.length > 10) {
+      history = history.slice(-10);
+    }
+
+    // Save updated history
+    conversationHistory.set(userId, history);
+
+    return response;
+
   } catch (error) {
     console.error('Error in chatCompletion:', error);
-    return {
-      status: 0,
-      response: 'An error occurred while processing your request.'
-    };
+    return "I apologize, but I'm having trouble processing your request right now. Please try again shortly.";
   }
 };
 
