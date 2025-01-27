@@ -24,69 +24,6 @@ const conversationHistory = new Map();
 // Store partial appointment details
 const appointmentContext = new Map();
 
-// Function to fetch car inventory
-async function getCarInformation(searchQuery) {
-  try {
-    const baseUrl = 'https://www.hendrickhondahickory.com';
-    const newCarsUrl = `${baseUrl}/new-inventory/index.htm`;
-    const usedCarsUrl = `${baseUrl}/used-inventory/index.htm`;
-    
-    const results = {
-      newCars: [],
-      usedCars: []
-    };
-
-    // Fetch new cars
-    const newCarsResponse = await axios.get(newCarsUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
-    
-    let $ = cheerio.load(newCarsResponse.data);
-    $('.vehicle-card').each((i, element) => {
-      const title = $(element).find('.vehicle-card-title').text().trim();
-      const price = $(element).find('.price').text().trim();
-      
-      if (title.toLowerCase().includes(searchQuery.toLowerCase())) {
-        results.newCars.push({
-          title,
-          price,
-          type: 'New'
-        });
-      }
-    });
-
-    // Fetch used cars
-    const usedCarsResponse = await axios.get(usedCarsUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
-    
-    $ = cheerio.load(usedCarsResponse.data);
-    $('.vehicle-card').each((i, element) => {
-      const title = $(element).find('.vehicle-card-title').text().trim();
-      const price = $(element).find('.price').text().trim();
-      const mileage = $(element).find('.mileage').text().trim();
-      
-      if (title.toLowerCase().includes(searchQuery.toLowerCase())) {
-        results.usedCars.push({
-          title,
-          price,
-          mileage,
-          type: 'Used'
-        });
-      }
-    });
-
-    return results;
-  } catch (error) {
-    console.error('Error fetching car information:', error);
-    return null;
-  }
-}
-
 // Function to log appointments
 const logAppointment = (appointmentDetails) => {
   try {
@@ -103,39 +40,26 @@ const logAppointment = (appointmentDetails) => {
     }
 
     const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] Name: ${appointmentDetails.name}, Phone: ${appointmentDetails.phone}, Appointment: ${appointmentDetails.datetime}\n`;
-    
-    console.log('Writing to log file:', logFile);
-    console.log('Log entry:', logEntry);
+    const logEntry = `${timestamp} - Appointment scheduled:\n` +
+                    `Name: ${appointmentDetails.name}\n` +
+                    `Phone: ${appointmentDetails.phone || 'Not provided'}\n` +
+                    `Date/Time: ${appointmentDetails.datetime}\n` +
+                    `Purpose: ${appointmentDetails.purpose || 'Not specified'}\n` +
+                    `Vehicle Interest: ${appointmentDetails.vehicle || 'Not specified'}\n` +
+                    '----------------------------------------\n';
 
     fs.appendFileSync(logFile, logEntry);
-    console.log('Successfully wrote to log file');
+    console.log('Appointment logged successfully');
 
-    // Send email notification
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: process.env.EMAIL_RECIPIENT,
-      subject: 'New Honda Dealership Appointment',
-      text: `New appointment has been scheduled:\n\n${logEntry}\n\nThis is an automated notification.`,
-      html: `
-        <h2>New Appointment Scheduled</h2>
-        <p><strong>Name:</strong> ${appointmentDetails.name}</p>
-        <p><strong>Phone:</strong> ${appointmentDetails.phone || 'Not provided'}</p>
-        <p><strong>Date/Time:</strong> ${appointmentDetails.datetime}</p>
-        <p><em>This is an automated notification from your Honda Dealership Bot.</em></p>
-      `
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.error('Email sending failed:', error);
-      } else {
-        console.log('Email notification sent:', info.response);
-      }
-    });
+    // Also save to leads.csv if it exists
+    const leadsFile = path.join(__dirname, '../leads.csv');
+    if (fs.existsSync(leadsFile)) {
+      const leadEntry = `${timestamp},"${appointmentDetails.name}","${appointmentDetails.phone || ''}","${appointmentDetails.email || ''}","Facebook","Messenger","New","Cindy","Appointment","${appointmentDetails.vehicle || ''}"\n`;
+      fs.appendFileSync(leadsFile, leadEntry);
+    }
 
   } catch (error) {
-    console.error('Error in logAppointment:', error);
+    console.error('Error logging appointment:', error);
   }
 };
 
@@ -147,7 +71,9 @@ const extractAppointmentDetails = (text, userId) => {
   let context = appointmentContext.get(userId) || {
     name: null,
     phone: null,
-    datetime: null
+    datetime: null,
+    purpose: null,
+    vehicle: null
   };
 
   // Remove the timestamp prefix from the text
@@ -190,14 +116,28 @@ const extractAppointmentDetails = (text, userId) => {
     if (period === "pm" && hours < 12) hours += 12;
     if (period === "am" && hours === 12) hours = 0;
     
-    // Validate business hours (8 AM to 6 PM)
-    const businessHours = hours >= 8 && hours <= 18;
+    // Validate business hours (9 AM to 6 PM)
+    const businessHours = hours >= 9 && hours <= 18;
     
     if (businessHours) {
       const formattedHours = hours.toString().padStart(2, '0');
       context.datetime = `Monday, January ${nextMonday.getDate()}, 2025 at ${formattedHours}:${minutes} ${period.toUpperCase()}`;
       console.log('Found datetime:', context.datetime);
     }
+  }
+
+  // Extract purpose
+  const purposeMatch = cleanText.match(/(?:looking for|interested in|want to|would like to)\s+(?:a\s+)?([A-Za-z\s]+)(?:\s+car|\s+vehicle)?/i);
+  if (purposeMatch) {
+    context.purpose = purposeMatch[1];
+    console.log('Found purpose:', context.purpose);
+  }
+
+  // Extract vehicle interest
+  const vehicleMatch = cleanText.match(/(?:looking for|interested in|want to|would like to)\s+(?:a\s+)?([A-Za-z\s]+)(?:\s+car|\s+vehicle)?/i);
+  if (vehicleMatch) {
+    context.vehicle = vehicleMatch[1];
+    console.log('Found vehicle interest:', context.vehicle);
   }
 
   console.log('Current appointment context:', context);
@@ -222,66 +162,49 @@ const chatCompletion = async (prompt, userId) => {
     const currentTime = now.toLocaleTimeString('en-US', { timeZone: 'America/New_York' });
     const currentDate = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-    // Check if the message is asking about cars
-    const carSearchTerms = prompt.match(/(?:looking for|search for|find|about)\s+(?:a\s+)?([A-Za-z\s]+)(?:\s+car|\s+vehicle|\s+honda)?/i);
-    let carInfoResponse = '';
-    
-    if (carSearchTerms) {
-      const searchQuery = carSearchTerms[1];
-      const carResults = await getCarInformation(searchQuery);
-      
-      if (carResults && (carResults.newCars.length > 0 || carResults.usedCars.length > 0)) {
-        carInfoResponse = "Here's what I found at Hendrick Honda Hickory:\n\n";
-        
-        if (carResults.newCars.length > 0) {
-          carInfoResponse += "New Cars:\n";
-          carResults.newCars.forEach(car => {
-            carInfoResponse += `- ${car.title}\n  Price: ${car.price}\n`;
-          });
-        }
-        
-        if (carResults.usedCars.length > 0) {
-          carInfoResponse += "\nUsed Cars:\n";
-          carResults.usedCars.forEach(car => {
-            carInfoResponse += `- ${car.title}\n  Price: ${car.price}\n  Mileage: ${car.mileage}\n`;
-          });
-        }
-        
-        prompt += `\n\nAvailable inventory information:\n${carInfoResponse}`;
-      }
-    }
-
     // Get or initialize conversation history for this user
     if (!conversationHistory.has(userId)) {
       conversationHistory.set(userId, [
         {
           role: "system",
-          content: `You are a helpful assistant at Hendrick Honda dealership in 2025. 
-                Current Date: ${currentDate}
-                Current Time: ${currentTime}
+          content: `You are Cindy from Car Source in Lenoir, NC. Your #1 priority is getting customers to visit our dealership! The current date is ${currentDate} and time is ${currentTime}.
 
-                Your primary tasks are:
-                - Setting up test drive appointments Monday-Friday, 8 AM to 6 PM only
-                - Scheduling service appointments Monday-Friday, 8 AM to 6 PM only
-                - Answering questions about available 2024-2025 Honda vehicles
-                - Providing Hendrick Honda dealership information
+                Core Mission:
+                - Get customers to schedule an appointment to visit Car Source
+                - Be persistent but friendly about setting appointments
+                - Always try to schedule same-day or next-day appointments when possible
                 
-                Key guidelines:
-                - Current year is 2025 - only schedule appointments for current dates
-                - Only schedule appointments during business hours (Mon-Fri, 8 AM - 6 PM)
-                - Always confirm the preferred day and time for appointments
-                - If a customer requests outside business hours, politely redirect them to available times
-                - Collect customer name and contact information for appointments
-                - Be concise and professional in responses
-                - Emphasize Hendrick Honda's commitment to customer service
+                Key Strategies:
+                1. Immediately offer to schedule a visit when customers show interest
+                2. If they're browsing, suggest: "Would you like to come see our inventory in person? I can schedule a time that works for you!"
+                3. For specific vehicle questions, respond: "We have several options that might interest you. When would you like to come take a look?"
+                4. If they're comparing prices: "I'd love to show you our competitive options in person. When works best for you to stop by?"
                 
-                When collecting appointment information, always ask for:
-                1. Full Name
-                2. Phone Number
-                3. Preferred Day and Time
+                Appointment Details to Collect:
+                - Full Name
+                - Phone Number
+                - Preferred Time (we're open Mon-Sat, 9 AM - 6 PM)
                 
-                Please always verify appointment details before confirming and ensure dates are in 2025.
-                Remember: Today is ${currentDate} at ${currentTime}.`
+                Key Points:
+                - Location: Car Source in Lenoir, NC
+                - Hours: Monday-Saturday, 9 AM to 6 PM
+                - We have a great selection of quality vehicles
+                - Financing options available
+                - Emphasize urgency: "Our best vehicles move quickly!"
+                
+                Response Style:
+                - Be friendly and enthusiastic
+                - Keep responses brief and focused on getting appointments
+                - Always suggest specific times ("Would 2pm today work?" rather than "When would you like to come?")
+                - If they can't make it immediately, lock in a future date
+                
+                Remember:
+                - Today is ${currentDate} at ${currentTime}
+                - Only schedule for current dates in 2025
+                - Every conversation should aim toward setting an appointment
+                
+                Appointment Confirmation:
+                "Great! I've got you scheduled to visit Car Source in Lenoir. We're looking forward to helping you find your perfect vehicle! Would you like directions to our dealership?"`
         }
       ]);
     }
