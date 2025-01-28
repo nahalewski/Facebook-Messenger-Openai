@@ -25,7 +25,7 @@ const conversationHistory = new Map();
 const appointmentContext = new Map();
 
 // Function to log appointments
-const logAppointment = (appointmentDetails) => {
+const logAppointment = async (appointmentDetails) => {
   try {
     console.log('Current directory:', __dirname);
     
@@ -207,6 +207,8 @@ const chatCompletion = async (prompt, userId) => {
       { role: "user", content: prompt }
     ];
 
+    console.log('Sending request to OpenAI with messages:', JSON.stringify(messages));
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4",
       messages: messages,
@@ -214,17 +216,33 @@ const chatCompletion = async (prompt, userId) => {
       max_tokens: 500
     });
 
+    console.log('Received response from OpenAI:', JSON.stringify(completion));
+
+    // Validate the response structure
+    if (!completion || !completion.choices || !completion.choices[0] || !completion.choices[0].message) {
+      throw new Error('Invalid response structure from OpenAI');
+    }
+
     // Get the response
     const response = completion.choices[0].message.content;
+
+    if (typeof response !== 'string' || response.trim().length === 0) {
+      throw new Error('Empty or invalid response from OpenAI');
+    }
 
     // Update conversation history
     history.push({ role: "user", content: prompt });
     history.push({ role: "assistant", content: response });
 
     // Check for appointment details
-    const appointmentDetails = extractAppointmentDetails(prompt, userId);
-    if (appointmentDetails && appointmentDetails.name && appointmentDetails.phone && appointmentDetails.datetime) {
-      logAppointment(appointmentDetails);
+    try {
+      const appointmentDetails = extractAppointmentDetails(prompt, userId);
+      if (appointmentDetails && appointmentDetails.name && appointmentDetails.phone && appointmentDetails.datetime) {
+        await logAppointment(appointmentDetails);
+      }
+    } catch (error) {
+      console.error('Error processing appointment details:', error);
+      // Don't throw here, continue with the response
     }
 
     // Limit history to last 10 messages to prevent context overflow
@@ -239,7 +257,10 @@ const chatCompletion = async (prompt, userId) => {
 
   } catch (error) {
     console.error('Error in chatCompletion:', error);
-    return "I apologize, but I'm having trouble processing your request right now. Please try again shortly.";
+    if (error.response) {
+      console.error('OpenAI API error response:', error.response.data);
+    }
+    throw new Error('Failed to process your request. Please try again.');
   }
 };
 
