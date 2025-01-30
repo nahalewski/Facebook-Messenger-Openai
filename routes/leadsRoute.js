@@ -104,6 +104,11 @@ function logActivity(type, description, leadId = null, userId = null) {
     return activity;
 }
 
+// Helper function to generate unique IDs
+function generateId() {
+    return 'lead_' + Math.random().toString(36).substr(2, 9);
+}
+
 // Routes
 router.get('/', async (req, res) => {
     try {
@@ -144,23 +149,28 @@ router.get('/', async (req, res) => {
 
 router.post('/add', (req, res) => {
     try {
-        const newLead = {
-            id: Date.now().toString(),
-            ...req.body,
-            time: new Date().toISOString(),
-            stage: req.body.stage || 'New',
-            value: parseFloat(req.body.value) || 0,
-            tags: [],
-            nextFollowUp: null
+        const lead = {
+            id: generateId(),
+            ...req.body
         };
-
-        leads.push(newLead);
-        logActivity('Lead Created', `New lead created: ${newLead.name}`);
         
-        res.redirect('/leads?message=Lead added successfully');
+        leads.push(lead);
+        
+        // Log activity
+        const activity = logActivity(
+            'Lead Added',
+            `New lead ${lead.name} added from ${lead.source}`,
+            lead.id
+        );
+        
+        res.json({ 
+            success: true, 
+            lead,
+            activity 
+        });
     } catch (error) {
         console.error('Error adding lead:', error);
-        res.status(500).send('Error adding lead');
+        res.status(500).json({ error: 'Error adding lead' });
     }
 });
 
