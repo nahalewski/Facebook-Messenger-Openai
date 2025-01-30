@@ -201,6 +201,41 @@
                 padding: 12px;
             }
         }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--background-color);
+            color: var(--text-color);
+        }
+
+        .primary-button {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .primary-button:hover {
+            background: var(--hover-color);
+            transform: translateY(-1px);
+        }
+
+        .button i {
+            font-size: 1rem;
+        }
     </style>
 </head>
 <body>
@@ -309,6 +344,15 @@
 
         <!-- Leads Table View -->
         <div class="tab-content" id="leads-content">
+            <div class="action-buttons" style="margin-bottom: 20px;">
+                <button class="button primary-button" onclick="document.getElementById('csvFileInput').click()">
+                    <i class="fas fa-file-upload"></i>
+                    Upload CSV
+                </button>
+                <form id="csvUploadForm" style="display: none;">
+                    <input type="file" id="csvFileInput" accept=".csv" onchange="handleFileUpload(this)">
+                </form>
+            </div>
             <!-- Previous table content remains the same -->
         </div>
 
@@ -435,6 +479,57 @@
         }
 
         // Previous JavaScript functions remain the same
+
+        function handleFileUpload(input) {
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
+                    alert('Please upload a valid CSV file');
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                // Show loading state
+                const uploadButton = input.parentElement.previousElementSibling;
+                const originalContent = uploadButton.innerHTML;
+                uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+                uploadButton.disabled = true;
+
+                fetch('/upload-leads', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Show success message
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = 'message';
+                        messageDiv.style.display = 'block';
+                        messageDiv.innerHTML = `Successfully uploaded ${data.count} leads`;
+                        document.querySelector('.container').insertBefore(messageDiv, document.querySelector('.dashboard'));
+                        
+                        // Refresh the page after 2 seconds
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 2000);
+                    } else {
+                        throw new Error(data.message || 'Upload failed');
+                    }
+                })
+                .catch(error => {
+                    alert('Error uploading file: ' + error.message);
+                })
+                .finally(() => {
+                    // Reset the input and button
+                    input.value = '';
+                    uploadButton.innerHTML = originalContent;
+                    uploadButton.disabled = false;
+                });
+            }
+        }
     </script>
 </body>
 </html>
