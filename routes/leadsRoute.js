@@ -83,6 +83,24 @@ function logActivity(type, description, leadId = null, userId = null) {
 router.get('/', async (req, res) => {
     try {
         const metrics = calculateMetrics();
+        
+        // Helper function for activity icons
+        const getActivityIcon = (type) => {
+            const iconMap = {
+                'CSV Import': 'file-import',
+                'Lead Created': 'user-plus',
+                'Lead Updated': 'user-edit',
+                'Follow-up Scheduled': 'calendar-plus',
+                'Note Added': 'sticky-note',
+                'Email Sent': 'envelope',
+                'Call Made': 'phone',
+                'Meeting Scheduled': 'calendar-check',
+                'Deal Won': 'trophy',
+                'Deal Lost': 'times-circle'
+            };
+            return iconMap[type] || 'circle';
+        };
+
         res.render('leads', {
             title: "Brian's Leads",
             leads,
@@ -90,6 +108,7 @@ router.get('/', async (req, res) => {
             activities: activities.slice(0, 20),
             metrics,
             pipelines,
+            getActivityIcon,
             message: req.query.message
         });
     } catch (error) {

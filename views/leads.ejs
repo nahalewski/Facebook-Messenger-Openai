@@ -467,15 +467,19 @@
 
         // Helper function to get activity icon
         function getActivityIcon(type) {
-            const icons = {
-                'Lead Created': 'plus',
-                'Stage Changed': 'arrow-right',
-                'Task Created': 'tasks',
+            const iconMap = {
+                'CSV Import': 'file-import',
+                'Lead Created': 'user-plus',
+                'Lead Updated': 'user-edit',
+                'Follow-up Scheduled': 'calendar-plus',
                 'Note Added': 'sticky-note',
-                'Follow-up Scheduled': 'calendar',
-                'CSV Import': 'file-import'
+                'Email Sent': 'envelope',
+                'Call Made': 'phone',
+                'Meeting Scheduled': 'calendar-check',
+                'Deal Won': 'trophy',
+                'Deal Lost': 'times-circle'
             };
-            return icons[type] || 'circle';
+            return iconMap[type] || 'circle';
         }
 
         // Previous JavaScript functions remain the same
