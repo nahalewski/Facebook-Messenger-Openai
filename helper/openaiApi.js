@@ -111,6 +111,106 @@ const extractLeadInfo = (text, userId) => {
     return context;
 };
 
+// Function to format chat history for email
+const formatChatHistory = (history) => {
+    return history.map(msg => {
+        const role = msg.role === 'user' ? 'Customer' : 'Sarah';
+        return `${role}: ${msg.content}\n`;
+    }).join('\n');
+};
+
+// Function to send chat log and lead information
+const sendChatLogEmail = async (userId, leadInfo) => {
+    try {
+        const history = conversationHistory.get(userId) || [];
+        const chatLog = formatChatHistory(history);
+        
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: 'brian@example.com', // Replace with Brian's email
+            subject: `Chat Log & Lead Information - ${leadInfo.businessName}`,
+            text: `New Lead from Business Internet Chat:
+
+LEAD INFORMATION
+---------------
+Business Name: ${leadInfo.businessName}
+Contact Name: ${leadInfo.contactName}
+Position: ${leadInfo.position}
+Phone: ${leadInfo.phone}
+Email: ${leadInfo.email}
+Current Provider: ${leadInfo.currentProvider}
+Current Speed: ${leadInfo.currentSpeed}
+Desired Speed: ${leadInfo.desiredSpeed}
+Employee Count: ${leadInfo.employeeCount}
+Special Requirements: ${leadInfo.specialRequirements}
+Best Time to Call: ${leadInfo.bestCallTime}
+
+BUSINESS NEEDS ASSESSMENT
+------------------------
+Pain Points: ${leadInfo.painPoints}
+Growth Plans: ${leadInfo.growthPlans || 'Not discussed'}
+Critical Applications: ${leadInfo.criticalApps || 'Not discussed'}
+Budget Range: ${leadInfo.monthlyBudget ? `$${leadInfo.monthlyBudget}/month` : 'Not discussed'}
+
+COMPLETE CHAT LOG
+---------------
+${chatLog}
+
+NEXT STEPS
+---------
+1. Call the customer at their preferred time: ${leadInfo.bestCallTime}
+2. Review their current setup and pain points
+3. Prepare a customized solution based on their needs
+4. Schedule a follow-up meeting if needed
+
+This lead was captured on ${new Date().toLocaleString()}`,
+            html: `
+            <h2>New Lead from Business Internet Chat</h2>
+            
+            <h3>LEAD INFORMATION</h3>
+            <table style="border-collapse: collapse; width: 100%; margin-bottom: 20px;">
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Business Name:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.businessName}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Contact Name:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.contactName}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Position:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.position}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Phone:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.phone}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Email:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.email}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Current Provider:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.currentProvider}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Current Speed:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.currentSpeed}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Desired Speed:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.desiredSpeed}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Employee Count:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.employeeCount}</td></tr>
+            </table>
+
+            <h3>BUSINESS NEEDS ASSESSMENT</h3>
+            <table style="border-collapse: collapse; width: 100%; margin-bottom: 20px;">
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Pain Points:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.painPoints}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Growth Plans:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.growthPlans || 'Not discussed'}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Critical Applications:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.criticalApps || 'Not discussed'}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Budget Range:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${leadInfo.monthlyBudget ? `$${leadInfo.monthlyBudget}/month` : 'Not discussed'}</td></tr>
+            </table>
+
+            <h3>COMPLETE CHAT LOG</h3>
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                ${chatLog.split('\n').map(line => `<p style="margin: 5px 0;">${line}</p>`).join('')}
+            </div>
+
+            <h3>NEXT STEPS</h3>
+            <ol>
+                <li>Call the customer at their preferred time: <strong>${leadInfo.bestCallTime}</strong></li>
+                <li>Review their current setup and pain points</li>
+                <li>Prepare a customized solution based on their needs</li>
+                <li>Schedule a follow-up meeting if needed</li>
+            </ol>
+
+            <p style="color: #666; font-size: 12px;">This lead was captured on ${new Date().toLocaleString()}</p>`
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log('Chat log and lead information email sent successfully');
+    } catch (error) {
+        console.error('Error sending chat log email:', error);
+    }
+};
+
 const chatCompletion = async (prompt, userId) => {
     try {
         let history = conversationHistory.get(userId) || [];
@@ -144,8 +244,8 @@ const chatCompletion = async (prompt, userId) => {
             // Log the lead
             await logLead(context);
             
-            // Send email notification to Brian
-            await sendLeadNotification(context);
+            // Send chat log and lead information email
+            await sendChatLogEmail(userId, context);
             
             // Clear context after successful lead capture
             leadContext.delete(userId);
