@@ -371,6 +371,89 @@ router.post('/upload', upload.single('csvFile'), (req, res) => {
     }
 });
 
+// Add note to a lead
+router.post('/add-note', (req, res) => {
+    try {
+        const { leadId, note } = req.body;
+        const lead = leads.find(l => l.id === leadId);
+        
+        if (!lead) {
+            return res.status(404).json({ error: 'Lead not found' });
+        }
+
+        // Add note to activities
+        const activity = logActivity('Note Added', note, leadId);
+        
+        res.json({ 
+            success: true, 
+            activity 
+        });
+    } catch (error) {
+        console.error('Error adding note:', error);
+        res.status(500).json({ error: 'Error adding note' });
+    }
+});
+
+// Schedule a follow-up
+router.post('/schedule-followup', (req, res) => {
+    try {
+        const { leadId, dateTime, notes } = req.body;
+        const lead = leads.find(l => l.id === leadId);
+        
+        if (!lead) {
+            return res.status(404).json({ error: 'Lead not found' });
+        }
+
+        // Update lead with follow-up
+        lead.nextFollowUp = dateTime;
+        
+        // Add to activities
+        const activity = logActivity(
+            'Follow-up Scheduled', 
+            `Follow-up scheduled for ${new Date(dateTime).toLocaleString()}${notes ? ': ' + notes : ''}`,
+            leadId
+        );
+        
+        res.json({ 
+            success: true, 
+            activity 
+        });
+    } catch (error) {
+        console.error('Error scheduling follow-up:', error);
+        res.status(500).json({ error: 'Error scheduling follow-up' });
+    }
+});
+
+// Update lead stage
+router.post('/update-stage', (req, res) => {
+    try {
+        const { leadId, stage, notes } = req.body;
+        const lead = leads.find(l => l.id === leadId);
+        
+        if (!lead) {
+            return res.status(404).json({ error: 'Lead not found' });
+        }
+
+        const oldStage = lead.stage;
+        lead.stage = stage;
+        
+        // Add to activities
+        const activity = logActivity(
+            'Stage Updated',
+            `Stage changed from ${oldStage} to ${stage}${notes ? ': ' + notes : ''}`,
+            leadId
+        );
+        
+        res.json({ 
+            success: true, 
+            activity 
+        });
+    } catch (error) {
+        console.error('Error updating stage:', error);
+        res.status(500).json({ error: 'Error updating stage' });
+    }
+});
+
 module.exports = {
     router
 };

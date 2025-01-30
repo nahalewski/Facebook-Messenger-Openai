@@ -304,6 +304,46 @@
         .detail-value {
             flex: 1;
         }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .action-form {
+            display: none;
+            margin-top: 15px;
+            padding: 15px;
+            background: var(--background-color-light);
+            border-radius: var(--border-radius);
+        }
+
+        .action-form textarea {
+            width: 100%;
+            min-height: 100px;
+            margin-bottom: 10px;
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            resize: vertical;
+        }
+
+        .action-form input[type="datetime-local"] {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+
+        .form-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
@@ -536,6 +576,57 @@
                     <h3>Tags</h3>
                     <div class="pipeline-card-tags" id="modalLeadTags"></div>
                 </div>
+
+                <div class="modal-actions">
+                    <button class="button" onclick="showAddNoteForm()">
+                        <i class="fas fa-sticky-note"></i> Add Note
+                    </button>
+                    <button class="button" onclick="showScheduleFollowUpForm()">
+                        <i class="fas fa-calendar-plus"></i> Schedule Follow-up
+                    </button>
+                    <button class="button" onclick="showUpdateStageForm()">
+                        <i class="fas fa-exchange-alt"></i> Update Stage
+                    </button>
+                </div>
+
+                <!-- Add Note Form -->
+                <div id="addNoteForm" class="action-form">
+                    <h3>Add Note</h3>
+                    <textarea id="noteContent" placeholder="Enter your note here..."></textarea>
+                    <div class="form-buttons">
+                        <button class="button" onclick="cancelForm('addNoteForm')">Cancel</button>
+                        <button class="button primary-button" onclick="submitNote()">Save Note</button>
+                    </div>
+                </div>
+
+                <!-- Schedule Follow-up Form -->
+                <div id="scheduleFollowUpForm" class="action-form">
+                    <h3>Schedule Follow-up</h3>
+                    <input type="datetime-local" id="followUpDateTime">
+                    <textarea id="followUpNotes" placeholder="Enter follow-up details..."></textarea>
+                    <div class="form-buttons">
+                        <button class="button" onclick="cancelForm('scheduleFollowUpForm')">Cancel</button>
+                        <button class="button primary-button" onclick="submitFollowUp()">Schedule</button>
+                    </div>
+                </div>
+
+                <!-- Update Stage Form -->
+                <div id="updateStageForm" class="action-form">
+                    <h3>Update Stage</h3>
+                    <select id="newStage" class="form-control">
+                        <option value="New">New</option>
+                        <option value="Qualified">Qualified</option>
+                        <option value="Contacted">Contacted</option>
+                        <option value="Negotiation">Negotiation</option>
+                        <option value="Closed Won">Closed Won</option>
+                        <option value="Closed Lost">Closed Lost</option>
+                    </select>
+                    <textarea id="stageNotes" placeholder="Add notes about the stage change..."></textarea>
+                    <div class="form-buttons">
+                        <button class="button" onclick="cancelForm('updateStageForm')">Cancel</button>
+                        <button class="button primary-button" onclick="submitStageUpdate()">Update Stage</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -670,8 +761,11 @@
             }
         }
 
+        let currentLeadId = null;
+
         function showLeadDetails(leadData) {
             const lead = JSON.parse(leadData);
+            currentLeadId = lead.id;  // Store the current lead ID
             const modal = document.getElementById('leadModal');
             
             // Update modal content
@@ -712,6 +806,136 @@
             if (event.target == modal) {
                 modal.style.display = 'none';
             }
+        }
+
+        function showAddNoteForm() {
+            hideAllForms();
+            document.getElementById('addNoteForm').style.display = 'block';
+        }
+
+        function showScheduleFollowUpForm() {
+            hideAllForms();
+            document.getElementById('scheduleFollowUpForm').style.display = 'block';
+            // Set default datetime to tomorrow
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setMinutes(tomorrow.getMinutes() - tomorrow.getTimezoneOffset());
+            document.getElementById('followUpDateTime').value = tomorrow.toISOString().slice(0,16);
+        }
+
+        function showUpdateStageForm() {
+            hideAllForms();
+            document.getElementById('updateStageForm').style.display = 'block';
+        }
+
+        function hideAllForms() {
+            const forms = document.getElementsByClassName('action-form');
+            for (let form of forms) {
+                form.style.display = 'none';
+            }
+        }
+
+        function cancelForm(formId) {
+            document.getElementById(formId).style.display = 'none';
+        }
+
+        function submitNote() {
+            const noteContent = document.getElementById('noteContent').value;
+            if (!noteContent.trim()) {
+                alert('Please enter a note');
+                return;
+            }
+
+            fetch('/leads/add-note', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    leadId: currentLeadId,
+                    note: noteContent
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Note added successfully');
+                    cancelForm('addNoteForm');
+                    document.getElementById('noteContent').value = '';
+                } else {
+                    throw new Error(data.error || 'Failed to add note');
+                }
+            })
+            .catch(error => {
+                alert('Error adding note: ' + error.message);
+            });
+        }
+
+        function submitFollowUp() {
+            const dateTime = document.getElementById('followUpDateTime').value;
+            const notes = document.getElementById('followUpNotes').value;
+            
+            if (!dateTime) {
+                alert('Please select a date and time');
+                return;
+            }
+
+            fetch('/leads/schedule-followup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    leadId: currentLeadId,
+                    dateTime: dateTime,
+                    notes: notes
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Follow-up scheduled successfully');
+                    cancelForm('scheduleFollowUpForm');
+                    document.getElementById('followUpNotes').value = '';
+                } else {
+                    throw new Error(data.error || 'Failed to schedule follow-up');
+                }
+            })
+            .catch(error => {
+                alert('Error scheduling follow-up: ' + error.message);
+            });
+        }
+
+        function submitStageUpdate() {
+            const newStage = document.getElementById('newStage').value;
+            const notes = document.getElementById('stageNotes').value;
+
+            fetch('/leads/update-stage', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    leadId: currentLeadId,
+                    stage: newStage,
+                    notes: notes
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Stage updated successfully');
+                    cancelForm('updateStageForm');
+                    document.getElementById('stageNotes').value = '';
+                    // Refresh the page to show the updated stage
+                    window.location.reload();
+                } else {
+                    throw new Error(data.error || 'Failed to update stage');
+                }
+            })
+            .catch(error => {
+                alert('Error updating stage: ' + error.message);
+            });
         }
     </script>
 </body>
