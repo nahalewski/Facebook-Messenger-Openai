@@ -16,6 +16,7 @@
             --stage-qualified: #2196F3;
             --stage-contacted: #FFC107;
             --stage-intake: #9C27B0;
+            --stage-closed: #FF5722;
         }
 
         body {
@@ -34,139 +35,147 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
-        h1 {
-            color: var(--text-color);
-            margin-bottom: 20px;
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
         }
 
-        .upload-section {
-            margin: 20px 0;
+        .metric-card {
+            background: white;
             padding: 20px;
-            background: #fff;
-            border: 2px dashed #ddd;
             border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             text-align: center;
         }
 
-        .upload-form {
-            display: inline-flex;
-            align-items: center;
+        .metric-card h3 {
+            margin: 0;
+            color: var(--text-color);
+            font-size: 1rem;
+        }
+
+        .metric-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin: 10px 0;
+        }
+
+        .tabs {
+            display: flex;
             gap: 10px;
+            margin-bottom: 20px;
         }
 
-        .file-input-wrapper {
-            position: relative;
-            overflow: hidden;
-            display: inline-block;
-        }
-
-        .file-input-wrapper input[type=file] {
-            position: absolute;
-            left: 0;
-            top: 0;
-            opacity: 0;
-            cursor: pointer;
-        }
-
-        .button {
-            background-color: var(--primary-color);
-            color: white;
+        .tab {
             padding: 10px 20px;
+            background: #f0f0f0;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
-            transition: background-color 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
         }
 
-        .button:hover {
-            background-color: var(--hover-color);
+        .tab.active {
+            background: var(--primary-color);
+            color: white;
         }
 
-        .message {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 4px;
-            background-color: #e8f5e9;
-            color: #2e7d32;
+        .tab-content {
             display: none;
         }
 
-        table {
+        .tab-content.active {
+            display: block;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            font-size: 14px;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
         }
 
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
+        .modal.active {
+            display: flex;
         }
 
-        th {
-            background-color: var(--primary-color);
-            color: white;
-            white-space: nowrap;
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 100%;
         }
 
-        tr:hover {
-            background-color: #f5f5f5;
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
 
         .stage-badge {
             padding: 4px 8px;
             border-radius: 12px;
-            color: white;
             font-size: 12px;
-            font-weight: 500;
-            text-transform: uppercase;
-            white-space: nowrap;
+            color: white;
         }
 
-        .stage-Intake { background-color: var(--stage-intake); }
-        .stage-Qualified { background-color: var(--stage-qualified); }
-        .stage-New { background-color: var(--stage-new); }
-        .stage-Contacted { background-color: var(--stage-contacted); }
+        .stage-New { background: var(--stage-new); }
+        .stage-Qualified { background: var(--stage-qualified); }
+        .stage-Contacted { background: var(--stage-contacted); }
+        .stage-Intake { background: var(--stage-intake); }
+        .stage-Closed { background: var(--stage-closed); }
 
-        .dataTables_wrapper .dataTables_filter input {
-            margin-left: 0.5em;
-            padding: 5px;
-            border: 1px solid #ddd;
+        .priority-High { color: #dc3545; }
+        .priority-Medium { color: #ffc107; }
+        .priority-Low { color: #28a745; }
+
+        .task-list {
+            margin-top: 20px;
+        }
+
+        .task-item {
+            background: #f8f9fa;
+            padding: 15px;
             border-radius: 4px;
+            margin-bottom: 10px;
         }
 
-        .dataTables_wrapper .dataTables_length select {
-            padding: 5px;
-            border: 1px solid #ddd;
+        .notes-section {
+            margin-top: 20px;
+        }
+
+        .note-item {
+            background: #f8f9fa;
+            padding: 15px;
             border-radius: 4px;
-        }
-
-        .email-cell {
-            max-width: 200px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .details-cell {
-            max-width: 300px;
-            white-space: pre-wrap;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 10px;
-            }
-
-            table {
-                display: block;
-                overflow-x: auto;
-            }
+            margin-bottom: 10px;
         }
     </style>
 </head>
@@ -180,60 +189,234 @@
             </div>
         <% } %>
 
-        <div class="upload-section">
-            <form action="/leads/upload" method="post" enctype="multipart/form-data" class="upload-form">
-                <div class="file-input-wrapper">
-                    <button type="button" class="button">
-                        <i class="fas fa-file-csv"></i>
-                        Choose CSV File
-                    </button>
-                    <input type="file" name="csvFile" accept=".csv" id="csvFile" onchange="updateFileName(this)">
-                </div>
-                <span id="fileName"></span>
-                <button type="submit" class="button">
-                    <i class="fas fa-upload"></i>
-                    Upload Leads
-                </button>
-            </form>
-            <p style="margin-top: 10px; color: #666;">
-                CSV should include columns: Created, Name, Email, Source, Form, Channel, Stage, Owner, Labels, Phone, Secondary Phone Number
-            </p>
+        <!-- Dashboard -->
+        <div class="dashboard">
+            <div class="metric-card">
+                <h3>Total Leads</h3>
+                <div class="value"><%= metrics.totalLeads %></div>
+            </div>
+            <div class="metric-card">
+                <h3>New Leads</h3>
+                <div class="value"><%= metrics.newLeads %></div>
+            </div>
+            <div class="metric-card">
+                <h3>Qualified Leads</h3>
+                <div class="value"><%= metrics.qualifiedLeads %></div>
+            </div>
+            <div class="metric-card">
+                <h3>Closed Leads</h3>
+                <div class="value"><%= metrics.closedLeads %></div>
+            </div>
+            <div class="metric-card">
+                <h3>Conversion Rate</h3>
+                <div class="value"><%= metrics.conversionRate %>%</div>
+            </div>
         </div>
 
-        <table id="leadsTable">
-            <thead>
-                <tr>
-                    <th>Created</th>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Phone</th>
-                    <th>Secondary Phone</th>
-                    <th>Stage</th>
-                    <th>Source</th>
-                    <th>Channel</th>
-                    <th>Owner</th>
-                    <th>Labels</th>
-                    <th>Details</th>
-                </tr>
-            </thead>
-            <tbody>
-                <% leads.forEach(function(lead) { %>
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-tab="leads">Leads</button>
+            <button class="tab" data-tab="tasks">Tasks</button>
+        </div>
+
+        <!-- Leads Tab -->
+        <div class="tab-content active" id="leads-content">
+            <div class="action-buttons">
+                <button class="button" onclick="showAddLeadModal()">
+                    <i class="fas fa-plus"></i>
+                    Add Lead
+                </button>
+                <div class="upload-section">
+                    <form action="/leads/upload" method="post" enctype="multipart/form-data" class="upload-form">
+                        <div class="file-input-wrapper">
+                            <button type="button" class="button">
+                                <i class="fas fa-file-csv"></i>
+                                Choose CSV File
+                            </button>
+                            <input type="file" name="csvFile" accept=".csv" id="csvFile" onchange="updateFileName(this)">
+                        </div>
+                        <span id="fileName"></span>
+                        <button type="submit" class="button">
+                            <i class="fas fa-upload"></i>
+                            Upload Leads
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <table id="leadsTable">
+                <thead>
                     <tr>
-                        <td><%= new Date(lead.time).toLocaleString() %></td>
-                        <td><%= lead.name %></td>
-                        <td class="email-cell"><%= lead.email %></td>
-                        <td><%= lead.phone %></td>
-                        <td><%= lead.secondaryPhone %></td>
-                        <td><span class="stage-badge stage-<%= lead.stage %>"><%= lead.stage %></span></td>
-                        <td><%= lead.type %></td>
-                        <td><%= lead.channel %></td>
-                        <td><%= lead.owner %></td>
-                        <td><%= lead.labels %></td>
-                        <td class="details-cell"><%= lead.details %></td>
+                        <th>Actions</th>
+                        <th>Created</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Secondary Phone</th>
+                        <th>Stage</th>
+                        <th>Priority</th>
+                        <th>Source</th>
+                        <th>Channel</th>
+                        <th>Owner</th>
+                        <th>Labels</th>
+                        <th>Details</th>
                     </tr>
+                </thead>
+                <tbody>
+                    <% leads.forEach(function(lead) { %>
+                        <tr data-lead-id="<%= lead.id %>">
+                            <td>
+                                <button class="button" onclick="showLeadActions('<%= lead.id %>')">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                            </td>
+                            <td><%= new Date(lead.time).toLocaleString() %></td>
+                            <td><%= lead.name %></td>
+                            <td class="email-cell"><%= lead.email %></td>
+                            <td><%= lead.phone %></td>
+                            <td><%= lead.secondaryPhone %></td>
+                            <td><span class="stage-badge stage-<%= lead.stage %>"><%= lead.stage %></span></td>
+                            <td><span class="priority-<%= lead.priority %>"><%= lead.priority %></span></td>
+                            <td><%= lead.type %></td>
+                            <td><%= lead.channel %></td>
+                            <td><%= lead.owner %></td>
+                            <td><%= lead.labels %></td>
+                            <td class="details-cell"><%= lead.details %></td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Tasks Tab -->
+        <div class="tab-content" id="tasks-content">
+            <div class="action-buttons">
+                <button class="button" onclick="showAddTaskModal()">
+                    <i class="fas fa-plus"></i>
+                    Add Task
+                </button>
+            </div>
+            <div class="task-list">
+                <% tasks.forEach(function(task) { %>
+                    <div class="task-item" data-task-id="<%= task.id %>">
+                        <h4><%= task.title %></h4>
+                        <p><%= task.description %></p>
+                        <div class="task-meta">
+                            <span class="priority-<%= task.priority %>"><%= task.priority %></span>
+                            <span>Due: <%= new Date(task.dueDate).toLocaleDateString() %></span>
+                            <span>Status: <%= task.status %></span>
+                        </div>
+                        <button class="button" onclick="updateTaskStatus('<%= task.id %>')">
+                            Mark Complete
+                        </button>
+                    </div>
                 <% }); %>
-            </tbody>
-        </table>
+            </div>
+        </div>
+
+        <!-- Add Lead Modal -->
+        <div class="modal" id="addLeadModal">
+            <div class="modal-content">
+                <h2>Add New Lead</h2>
+                <form id="addLeadForm">
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input type="text" name="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" name="email">
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="tel" name="phone">
+                    </div>
+                    <div class="form-group">
+                        <label>Secondary Phone</label>
+                        <input type="tel" name="secondaryPhone">
+                    </div>
+                    <div class="form-group">
+                        <label>Stage</label>
+                        <select name="stage">
+                            <option value="New">New</option>
+                            <option value="Qualified">Qualified</option>
+                            <option value="Contacted">Contacted</option>
+                            <option value="Intake">Intake</option>
+                            <option value="Closed">Closed</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select name="priority">
+                            <option value="High">High</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Low">Low</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Source</label>
+                        <input type="text" name="type">
+                    </div>
+                    <div class="form-group">
+                        <label>Channel</label>
+                        <input type="text" name="channel">
+                    </div>
+                    <div class="form-group">
+                        <label>Owner</label>
+                        <input type="text" name="owner">
+                    </div>
+                    <div class="form-group">
+                        <label>Labels</label>
+                        <input type="text" name="labels">
+                    </div>
+                    <div class="form-group">
+                        <label>Details</label>
+                        <textarea name="details"></textarea>
+                    </div>
+                    <button type="submit" class="button">Add Lead</button>
+                    <button type="button" class="button" onclick="hideModal('addLeadModal')">Cancel</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Add Task Modal -->
+        <div class="modal" id="addTaskModal">
+            <div class="modal-content">
+                <h2>Add New Task</h2>
+                <form id="addTaskForm">
+                    <div class="form-group">
+                        <label>Lead</label>
+                        <select name="leadId" required>
+                            <% leads.forEach(function(lead) { %>
+                                <option value="<%= lead.id %>"><%= lead.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Title</label>
+                        <input type="text" name="title" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea name="description"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Due Date</label>
+                        <input type="date" name="dueDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select name="priority">
+                            <option value="High">High</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Low">Low</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="button">Add Task</button>
+                    <button type="button" class="button" onclick="hideModal('addTaskModal')">Cancel</button>
+                </form>
+            </div>
+        </div>
     </div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -241,22 +424,116 @@
     <script>
         $(document).ready(function() {
             $('#leadsTable').DataTable({
-                order: [[0, 'desc']],
+                order: [[1, 'desc']],
                 pageLength: 25,
                 responsive: true,
                 columnDefs: [
-                    { targets: [2, 10], orderable: false }
+                    { targets: [0, 3, 12], orderable: false }
                 ]
             });
 
             setTimeout(function() {
                 $('.message').fadeOut('slow');
             }, 5000);
+
+            // Tab switching
+            $('.tab').click(function() {
+                $('.tab').removeClass('active');
+                $(this).addClass('active');
+                $('.tab-content').removeClass('active');
+                $(`#${$(this).data('tab')}-content`).addClass('active');
+            });
         });
 
         function updateFileName(input) {
             const fileName = input.files[0] ? input.files[0].name : '';
             document.getElementById('fileName').textContent = fileName;
+        }
+
+        function showModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+
+        function hideModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        function showAddLeadModal() {
+            showModal('addLeadModal');
+        }
+
+        function showAddTaskModal() {
+            showModal('addTaskModal');
+        }
+
+        // Handle lead form submission
+        document.getElementById('addLeadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            try {
+                const response = await fetch('/leads/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data),
+                });
+                
+                if (response.ok) {
+                    window.location.reload();
+                }
+            } catch (error) {
+                console.error('Error adding lead:', error);
+            }
+        });
+
+        // Handle task form submission
+        document.getElementById('addTaskForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            const leadId = data.leadId;
+            
+            try {
+                const response = await fetch(`/leads/${leadId}/tasks`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data),
+                });
+                
+                if (response.ok) {
+                    window.location.reload();
+                }
+            } catch (error) {
+                console.error('Error adding task:', error);
+            }
+        });
+
+        async function updateTaskStatus(taskId) {
+            try {
+                const response = await fetch(`/leads/tasks/${taskId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ status: 'Completed' }),
+                });
+                
+                if (response.ok) {
+                    window.location.reload();
+                }
+            } catch (error) {
+                console.error('Error updating task:', error);
+            }
+        }
+
+        function showLeadActions(leadId) {
+            // Implement lead actions menu (edit, delete, add note, etc.)
+            console.log('Show actions for lead:', leadId);
         }
     </script>
 </body>
