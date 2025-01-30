@@ -5,64 +5,42 @@ const csv = require('csv-parser');
 const fs = require('fs');
 const path = require('path');
 
-// In-memory storage (replace with database in production)
+// Initialize empty arrays for leads and activities
 let leads = [];
-let tasks = [];
 let activities = [];
+let tasks = [];
 let tags = [];
 let reminders = [];
 let pipelines = [{
-    id: 'default',
-    name: 'Default Pipeline',
+    id: 'main',
+    name: 'Main Pipeline',
     stages: ['New', 'Qualified', 'Contacted', 'Negotiation', 'Closed Won', 'Closed Lost']
 }];
 
-// Load initial leads from CSV
-function loadInitialLeads() {
-    const results = [];
-    fs.createReadStream(path.join(__dirname, '../leads-3.csv'))
-        .pipe(csv())
-        .on('data', (data) => {
-            // Parse the date from the Created field
-            const createdDate = new Date(data.Created);
-            
-            // Parse labels into an array
-            const tags = data.Labels ? data.Labels.split(',').map(tag => tag.trim()) : [];
-            
-            const lead = {
-                id: Date.now().toString() + results.length,
-                time: createdDate.toISOString(),
-                name: data.Name || 'Unknown',
-                email: data.Email || '',
-                phone: data.Phone || '',
-                secondaryPhone: data['Secondary Phone Number'] || '',
-                source: data.Source || '',
-                form: data.Form || '',
-                channel: data.Channel || '',
-                stage: data.Stage || 'New',
-                owner: data.Owner || 'Unassigned',
-                tags: tags,
-                value: 0, // You can add logic to calculate value based on other fields
-                nextFollowUp: null
-            };
-            results.push(lead);
-            
-            // Add activity for lead creation
-            activities.push({
-                type: 'Lead Created',
-                description: `New lead created: ${lead.name}`,
-                time: lead.time,
-                leadId: lead.id
-            });
-        })
-        .on('end', () => {
-            leads = results;
-            console.log(`Loaded ${leads.length} leads from leads-3.csv`);
-        });
-}
+// Setup multer for CSV uploads
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadDir = path.join(__dirname, '../uploads');
+        // Create uploads directory if it doesn't exist
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        cb(null, 'leads-' + Date.now() + '.csv');
+    }
+});
 
-// Load initial leads when the server starts
-loadInitialLeads();
+const upload = multer({ 
+    storage: storage,
+    fileFilter: function (req, file, cb) {
+        if (!file.originalname.toLowerCase().endsWith('.csv')) {
+            return cb(new Error('Only CSV files are allowed'));
+        }
+        cb(null, true);
+    }
+});
 
 // Helper functions
 function calculateMetrics() {
@@ -318,31 +296,7 @@ router.post('/:id/followup', (req, res) => {
     }
 });
 
-// CSV Upload handling
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        const uploadDir = path.join(__dirname, '../uploads');
-        // Create uploads directory if it doesn't exist
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        cb(null, uploadDir);
-    },
-    filename: function (req, file, cb) {
-        cb(null, 'leads-' + Date.now() + '.csv');
-    }
-});
-
-const upload = multer({ 
-    storage: storage,
-    fileFilter: function (req, file, cb) {
-        if (!file.originalname.toLowerCase().endsWith('.csv')) {
-            return cb(new Error('Only CSV files are allowed'));
-        }
-        cb(null, true);
-    }
-});
-
+// CSV upload route
 router.post('/upload', upload.single('csvFile'), (req, res) => {
     try {
         if (!req.file) {
@@ -353,18 +307,27 @@ router.post('/upload', upload.single('csvFile'), (req, res) => {
         fs.createReadStream(req.file.path)
             .pipe(csv())
             .on('data', (data) => {
+                // Parse the date from the Created field
+                const createdDate = new Date(data.Created || new Date());
+                
+                // Parse labels into an array
+                const tags = data.Labels ? data.Labels.split(',').map(tag => tag.trim()) : [];
+                
                 const lead = {
                     id: Date.now().toString() + results.length,
-                    time: new Date().toISOString(),
-                    stage: 'New',
-                    value: parseFloat(data.value) || 0,
-                    name: data.name || 'Unknown',
-                    email: data.email || '',
-                    phone: data.phone || '',
-                    company: data.company || '',
-                    tags: [],
-                    nextFollowUp: null,
-                    ...data
+                    time: createdDate.toISOString(),
+                    name: data.Name || 'Unknown',
+                    email: data.Email || '',
+                    phone: data.Phone || '',
+                    secondaryPhone: data['Secondary Phone Number'] || '',
+                    source: data.Source || '',
+                    form: data.Form || '',
+                    channel: data.Channel || '',
+                    stage: data.Stage || 'New',
+                    owner: data.Owner || 'Unassigned',
+                    tags: tags,
+                    value: 0,
+                    nextFollowUp: null
                 };
                 results.push(lead);
             })
@@ -374,16 +337,25 @@ router.post('/upload', upload.single('csvFile'), (req, res) => {
                 res.status(500).json({ error: 'Error parsing CSV file' });
             })
             .on('end', () => {
+                // Add all new leads
                 leads.push(...results);
                 
-                logActivity('CSV Import', 
-                    `Imported ${results.length} leads from CSV`
-                );
+                // Add activities for the imported leads
+                results.forEach(lead => {
+                    activities.push({
+                        type: 'Lead Created',
+                        description: `New lead created: ${lead.name}`,
+                        time: lead.time,
+                        leadId: lead.id
+                    });
+                });
 
+                // Clean up the uploaded file
                 fs.unlink(req.file.path, (err) => {
                     if (err) console.error('Error deleting uploaded file:', err);
                 });
 
+                // Send success response
                 res.json({ 
                     success: true, 
                     message: 'Leads imported successfully',
