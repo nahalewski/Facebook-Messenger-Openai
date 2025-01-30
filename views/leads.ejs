@@ -321,8 +321,8 @@
                                 <div class="pipeline-card-meta">
                                     <div>
                                         <i class="fas fa-dollar-sign"></i>
-                                        <span class="value-indicator <%= lead.value > 10000 ? 'high' : lead.value > 5000 ? 'medium' : 'low' %>">
-                                            <%= lead.value.toLocaleString('en-US', { style: 'currency', currency: 'USD' }) %>
+                                        <span class="value-indicator <%= (lead.value || 0) > 10000 ? 'high' : (lead.value || 0) > 5000 ? 'medium' : 'low' %>">
+                                            <%= (lead.value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' }) %>
                                         </span>
                                     </div>
                                     <div>

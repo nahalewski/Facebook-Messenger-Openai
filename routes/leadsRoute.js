@@ -291,6 +291,13 @@ router.post('/upload', upload.single('csvFile'), (req, res) => {
                     id: Date.now().toString() + results.length,
                     time: new Date().toISOString(),
                     stage: 'New',
+                    value: parseFloat(data.value) || 0,
+                    name: data.name || 'Unknown',
+                    email: data.email || '',
+                    phone: data.phone || '',
+                    company: data.company || '',
+                    tags: [],
+                    nextFollowUp: null,
                     ...data
                 };
                 results.push(lead);
