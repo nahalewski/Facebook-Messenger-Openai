@@ -38,11 +38,35 @@ let reminders = [];
 let pipelines = [{
     id: 'main',
     name: 'Main Pipeline',
-    stages: ['New', 'Qualified', 'Contacted', 'Negotiation', 'Closed Won', 'Closed Lost']
+    stages: ['New Inquiry', 'Site Survey', 'Quote Provided', 'Contract Review', 'Installation Scheduled', 'Service Active', 'Closed Lost']
 }];
 
 // Pipeline stages
-const STAGES = ['New', 'Qualified', 'Contacted', 'Negotiation', 'Closed Won', 'Closed Lost'];
+const STAGES = ['New Inquiry', 'Site Survey', 'Quote Provided', 'Contract Review', 'Installation Scheduled', 'Service Active', 'Closed Lost'];
+
+// Service packages
+const PACKAGES = {
+    'Basic': {
+        speed: '200/10 Mbps',
+        price: 69.99,
+        features: ['Static IP Available', 'Business Email']
+    },
+    'Advanced': {
+        speed: '600/35 Mbps',
+        price: 109.99,
+        features: ['Static IP Included', 'Business Email', 'Enhanced Security']
+    },
+    'Premium': {
+        speed: '1000/500 Mbps',
+        price: 249.99,
+        features: ['Multiple Static IPs', 'Business Email Suite', 'Advanced Security', '24/7 Priority Support']
+    },
+    'Enterprise': {
+        speed: 'Custom',
+        price: 'Custom',
+        features: ['Dedicated Fiber', 'SLA Guarantee', 'Enterprise Support', 'Custom Network Solutions']
+    }
+};
 
 // Load initial leads from CSV
 async function loadInitialLeads() {
@@ -59,20 +83,26 @@ async function loadInitialLeads() {
             .pipe(csv())
             .on('data', (data) => {
                 const lead = {
-                    id: Date.now().toString() + results.length,
-                    time: new Date().toISOString(),
-                    name: data.Name || 'Unknown',
+                    id: generateId(),
+                    name: data.Name || '',
+                    businessName: data.BusinessName || '',
                     email: data.Email || '',
                     phone: data.Phone || '',
-                    secondaryPhone: data['Secondary Phone Number'] || '',
-                    source: data.Source || '',
-                    form: data.Form || '',
-                    channel: data.Channel || '',
-                    stage: STAGES.includes(data.Stage) ? data.Stage : 'New',
-                    owner: data.Owner || 'Unassigned',
-                    tags: data.Tags ? data.Tags.split(',').map(tag => tag.trim()) : [],
-                    value: 0,
-                    nextFollowUp: null
+                    address: data.Address || '',
+                    currentProvider: data.CurrentProvider || '',
+                    currentSpeed: data.CurrentSpeed || '',
+                    desiredSpeed: data.DesiredSpeed || '',
+                    monthlyBudget: parseFloat(data.MonthlyBudget) || 0,
+                    employeeCount: parseInt(data.EmployeeCount) || 0,
+                    stage: STAGES.includes(data.Stage) ? data.Stage : 'New Inquiry',
+                    interestedServices: data.InterestedServices ? data.InterestedServices.split(',').map(s => s.trim()) : [],
+                    specialRequirements: data.SpecialRequirements || '',
+                    contractLength: data.ContractLength || '12 months',
+                    proposedPackage: data.ProposedPackage || '',
+                    siteType: data.SiteType || 'Single Location',
+                    created: data.Created || new Date().toISOString(),
+                    nextFollowUp: data.NextFollowUp || null,
+                    notes: data.Notes || ''
                 };
                 results.push(lead);
             })
@@ -94,7 +124,7 @@ async function loadInitialLeads() {
         // Ensure each lead has a valid stage
         leads = leads.map(lead => ({
             ...lead,
-            stage: STAGES.includes(lead.stage) ? lead.stage : 'New'
+            stage: STAGES.includes(lead.stage) ? lead.stage : 'New Inquiry'
         }));
     } catch (error) {
         console.error('Error loading initial leads:', error);
@@ -137,7 +167,7 @@ function parseCSV(file) {
                     source: data.Source || '',
                     form: data.Form || '',
                     channel: data.Channel || '',
-                    stage: STAGES.includes(data.Stage) ? data.Stage : 'New',
+                    stage: STAGES.includes(data.Stage) ? data.Stage : 'New Inquiry',
                     owner: data.Owner || 'Unassigned',
                     tags: data.Tags ? data.Tags.split(',').map(tag => tag.trim()) : [],
                     value: 0,
@@ -165,46 +195,18 @@ function calculateMetrics() {
 
     return {
         totalLeads: leads.length,
-        newLeads: leads.filter(l => l.stage === 'New').length,
-        qualifiedLeads: leads.filter(l => l.stage === 'Qualified').length,
-        closedWonLeads: leads.filter(l => l.stage === 'Closed Won').length,
-        conversionRate: calculateConversionRate(),
-        avgResponseTime: calculateAvgResponseTime(),
-        leadsByStage: calculateLeadsByStage(),
-        overdueTasks: tasks.filter(t => new Date(t.dueDate) < now && t.status !== 'Completed'),
-        upcomingTasks: tasks.filter(t => {
-            const dueDate = new Date(t.dueDate);
-            return dueDate >= now && dueDate <= new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-        }),
-        recentActivities: activities
-            .filter(a => new Date(a.time) >= oneWeekAgo)
-            .sort((a, b) => new Date(b.time) - new Date(a.time))
-            .slice(0, 20)
+        activeDeals: leads.filter(l => !['Service Active', 'Closed Lost'].includes(l.stage)).length,
+        installationsScheduled: leads.filter(l => l.stage === 'Installation Scheduled').length,
+        activeServices: leads.filter(l => l.stage === 'Service Active').length,
+        averageDealSize: leads.filter(l => l.monthlyBudget > 0).reduce((acc, curr) => acc + curr.monthlyBudget, 0) / 
+                       leads.filter(l => l.monthlyBudget > 0).length || 0,
+        topPackage: Object.entries(leads.reduce((acc, curr) => {
+            if (curr.proposedPackage) {
+                acc[curr.proposedPackage] = (acc[curr.proposedPackage] || 0) + 1;
+            }
+            return acc;
+        }, {})).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'
     };
-}
-
-function calculateConversionRate() {
-    const closedWon = leads.filter(l => l.stage === 'Closed Won').length;
-    const totalClosed = leads.filter(l => l.stage.startsWith('Closed')).length;
-    return totalClosed ? Math.round((closedWon / totalClosed) * 100) : 0;
-}
-
-function calculateAvgResponseTime() {
-    const responseActivities = activities.filter(a => a.type === 'Response');
-    if (!responseActivities.length) return 0;
-
-    const totalResponseTime = responseActivities.reduce((sum, activity) => {
-        return sum + (activity.responseTime || 0);
-    }, 0);
-
-    return Math.round(totalResponseTime / responseActivities.length);
-}
-
-function calculateLeadsByStage() {
-    return pipelines[0].stages.reduce((acc, stage) => {
-        acc[stage] = leads.filter(l => l.stage === stage).length;
-        return acc;
-    }, {});
 }
 
 // Routes
@@ -230,14 +232,13 @@ router.get('/', async (req, res) => {
         };
 
         res.render('leads', {
-            title: "Brian's Leads",
+            title: 'Business Internet Sales Dashboard',
             leads,
             tasks,
-            activities: activities.slice(0, 20),
-            metrics,
-            pipelines,
+            activities: activities,
             stages: STAGES,
-            getActivityIcon,
+            packages: PACKAGES,
+            metrics,
             message: req.query.message
         });
     } catch (error) {
@@ -432,7 +433,7 @@ router.post('/upload', upload.single('csvFile'), (req, res) => {
                     source: data.Source || '',
                     form: data.Form || '',
                     channel: data.Channel || '',
-                    stage: STAGES.includes(data.Stage) ? data.Stage : 'New',
+                    stage: STAGES.includes(data.Stage) ? data.Stage : 'New Inquiry',
                     owner: data.Owner || 'Unassigned',
                     tags: tags,
                     value: 0,
@@ -493,20 +494,26 @@ router.post('/import', upload.single('csvFile'), async (req, res) => {
                 .pipe(csv())
                 .on('data', (data) => {
                     const lead = {
-                        id: Date.now().toString() + results.length,
-                        time: new Date().toISOString(),
-                        name: data.Name || 'Unknown',
+                        id: generateId(),
+                        name: data.Name || '',
+                        businessName: data.BusinessName || '',
                         email: data.Email || '',
                         phone: data.Phone || '',
-                        secondaryPhone: data['Secondary Phone Number'] || '',
-                        source: data.Source || '',
-                        form: data.Form || '',
-                        channel: data.Channel || '',
-                        stage: STAGES.includes(data.Stage) ? data.Stage : 'New',
-                        owner: data.Owner || 'Unassigned',
-                        tags: data.Tags ? data.Tags.split(',').map(tag => tag.trim()) : [],
-                        value: 0,
-                        nextFollowUp: null
+                        address: data.Address || '',
+                        currentProvider: data.CurrentProvider || '',
+                        currentSpeed: data.CurrentSpeed || '',
+                        desiredSpeed: data.DesiredSpeed || '',
+                        monthlyBudget: parseFloat(data.MonthlyBudget) || 0,
+                        employeeCount: parseInt(data.EmployeeCount) || 0,
+                        stage: STAGES.includes(data.Stage) ? data.Stage : 'New Inquiry',
+                        interestedServices: data.InterestedServices ? data.InterestedServices.split(',').map(s => s.trim()) : [],
+                        specialRequirements: data.SpecialRequirements || '',
+                        contractLength: data.ContractLength || '12 months',
+                        proposedPackage: data.ProposedPackage || '',
+                        siteType: data.SiteType || 'Single Location',
+                        created: data.Created || new Date().toISOString(),
+                        nextFollowUp: data.NextFollowUp || null,
+                        notes: data.Notes || ''
                     };
                     results.push(lead);
                 })
@@ -525,7 +532,7 @@ router.post('/import', upload.single('csvFile'), async (req, res) => {
         // Log activity
         const activity = logActivity(
             'Leads Imported',
-            `Imported ${results.length} leads from CSV`,
+            `Imported ${results.length} business internet leads`,
             null
         );
         
@@ -623,6 +630,121 @@ router.post('/update-stage', (req, res) => {
     } catch (error) {
         console.error('Error updating stage:', error);
         res.status(500).json({ error: 'Error updating stage' });
+    }
+});
+
+// Chat endpoint for lead generation
+router.post('/chat', async (req, res) => {
+    try {
+        const { message, userId } = req.body;
+        
+        if (!message || !userId) {
+            return res.status(400).json({ error: 'Message and userId are required' });
+        }
+
+        const response = await openai.chatCompletion(message, userId);
+        
+        res.json({ 
+            success: true, 
+            message: response,
+            leadCaptured: leadContext.get(userId)?.interested || false
+        });
+    } catch (error) {
+        console.error('Error in chat endpoint:', error);
+        res.status(500).json({ error: 'Failed to process chat message' });
+    }
+});
+
+// Endpoint to mark lead as interested
+router.post('/mark-interested', async (req, res) => {
+    try {
+        const { userId } = req.body;
+        const context = leadContext.get(userId);
+        
+        if (context) {
+            context.interested = true;
+            leadContext.set(userId, context);
+            
+            // Log activity
+            const activity = logActivity(
+                'Lead Interested',
+                `${context.businessName || 'Business'} showed interest in services`,
+                context.businessName
+            );
+            
+            res.json({ success: true, activity });
+        } else {
+            res.status(404).json({ error: 'Lead context not found' });
+        }
+    } catch (error) {
+        console.error('Error marking lead as interested:', error);
+        res.status(500).json({ error: 'Failed to mark lead as interested' });
+    }
+});
+
+// Endpoint to schedule callback
+router.post('/schedule-callback', async (req, res) => {
+    try {
+        const { userId, callbackTime } = req.body;
+        const context = leadContext.get(userId);
+        
+        if (context) {
+            context.bestCallTime = callbackTime;
+            leadContext.set(userId, context);
+            
+            // Log activity
+            const activity = logActivity(
+                'Callback Scheduled',
+                `Callback scheduled with ${context.businessName || 'Business'} for ${callbackTime}`,
+                context.businessName
+            );
+            
+            // Send notification to Brian
+            await sendLeadNotification(context);
+            
+            res.json({ success: true, activity });
+        } else {
+            res.status(404).json({ error: 'Lead context not found' });
+        }
+    } catch (error) {
+        console.error('Error scheduling callback:', error);
+        res.status(500).json({ error: 'Failed to schedule callback' });
+    }
+});
+
+// Endpoint to get conversation history
+router.get('/conversation/:userId', (req, res) => {
+    try {
+        const { userId } = req.params;
+        const history = conversationHistory.get(userId) || [];
+        res.json({ success: true, history });
+    } catch (error) {
+        console.error('Error getting conversation history:', error);
+        res.status(500).json({ error: 'Failed to get conversation history' });
+    }
+});
+
+// Endpoint to clear conversation
+router.post('/clear-conversation', (req, res) => {
+    try {
+        const { userId } = req.body;
+        clearConversation(userId);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error clearing conversation:', error);
+        res.status(500).json({ error: 'Failed to clear conversation' });
+    }
+});
+
+// Chat page route
+router.get('/chat', (req, res) => {
+    try {
+        res.render('chat', {
+            title: 'Business Internet Solutions Chat'
+        });
+    } catch (error) {
+        console.error('Error rendering chat page:', error);
+        res.status(500).send('Error loading chat page');
     }
 });
 

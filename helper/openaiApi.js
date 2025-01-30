@@ -7,7 +7,7 @@ const cheerio = require('cheerio');
 require('dotenv').config();
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+    apiKey: process.env.OPENAI_API_KEY,
 });
 
 // Configure email transporter
@@ -21,258 +21,360 @@ const transporter = nodemailer.createTransport({
 
 // Store conversations for each user
 const conversationHistory = new Map();
-// Store partial appointment details
-const appointmentContext = new Map();
 
-// Function to log appointments
-const logAppointment = async (appointmentDetails) => {
-  try {
-    console.log('Current directory:', __dirname);
-    
-    const logDir = path.join(__dirname, '../logs');
-    const logFile = path.join(logDir, 'appointments.log');
-    
-    console.log('Attempting to create/access log directory:', logDir);
-    
-    if (!fs.existsSync(logDir)) {
-      console.log('Log directory does not exist, creating it...');
-      fs.mkdirSync(logDir, { recursive: true });
-    }
+// Store lead information
+const leadContext = new Map();
 
-    const timestamp = new Date().toISOString();
-    const logEntry = `${timestamp} - Appointment scheduled:\n` +
-                    `Name: ${appointmentDetails.name}\n` +
-                    `Phone: ${appointmentDetails.phone || 'Not provided'}\n` +
-                    `Date/Time: ${appointmentDetails.datetime}\n` +
-                    `Purpose: ${appointmentDetails.purpose || 'Not specified'}\n` +
-                    `Vehicle Interest: ${appointmentDetails.vehicle || 'Not specified'}\n` +
-                    '----------------------------------------\n';
+// System message defining the AI's role and expertise
+const systemMessage = {
+    role: "system",
+    content: `You are a knowledgeable Business Internet Solutions Advisor focused on generating qualified leads. Your name is Sarah, and you work with Brian, our Senior Business Solutions Consultant.
 
-    fs.appendFileSync(logFile, logEntry);
-    console.log('Appointment logged successfully');
+    Your expertise includes:
+    - High-speed fiber and broadband solutions for businesses
+    - Network infrastructure and bandwidth requirements
+    - Service Level Agreements (SLAs) and uptime guarantees
+    - IP addressing and network security
+    - Voice and data solutions
+    - Cloud connectivity options
+    - Multi-location networking
+    - Backup and redundancy solutions
 
-    // Also save to leads.csv if it exists
-    const leadsFile = path.join(__dirname, '../leads.csv');
-    if (fs.existsSync(leadsFile)) {
-      const leadEntry = `${timestamp},"${appointmentDetails.name}","${appointmentDetails.phone || ''}","${appointmentDetails.email || ''}","Facebook","Messenger","New","Cindy","Appointment","${appointmentDetails.vehicle || ''}"\n`;
-      fs.appendFileSync(leadsFile, leadEntry);
-    }
+    Available Service Packages:
+    - Basic: 200/10 Mbps, Static IP Available, Business Email ($69.99/mo)
+    - Advanced: 600/35 Mbps, Static IP Included, Enhanced Security ($109.99/mo)
+    - Premium: 1000/500 Mbps, Multiple Static IPs, Advanced Security ($249.99/mo)
+    - Enterprise: Custom Solutions, Dedicated Fiber, SLA Guarantee (Custom pricing)
 
-  } catch (error) {
-    console.error('Error logging appointment:', error);
-  }
+    Lead Generation Process:
+    1. Introduce yourself as Sarah and establish rapport
+    2. Ask qualifying questions about their business:
+       - Business name and location
+       - Current internet setup and pain points
+       - Number of employees and devices
+       - Critical business applications
+       - Growth plans
+    3. Listen to their needs and provide relevant solution information
+    4. When interest is shown, collect:
+       - Contact name and position
+       - Phone number
+       - Email address
+       - Best time for Brian to call
+    5. Once information is collected, inform them that Brian will call them shortly
+    6. Log the lead information
+
+    Always be professional, helpful, and focus on understanding their business needs before discussing solutions.`
 };
 
-// Function to extract appointment details from text
-const extractAppointmentDetails = (text, userId) => {
-  console.log('Analyzing text for appointment details:', text);
-  
-  // Get existing context or create new one
-  let context = appointmentContext.get(userId) || {
-    name: null,
-    phone: null,
-    datetime: null,
-    purpose: null,
-    vehicle: null
-  };
+// Function to extract lead information from conversation
+const extractLeadInfo = (text, userId) => {
+    let context = leadContext.get(userId) || {
+        businessName: null,
+        contactName: null,
+        position: null,
+        phone: null,
+        email: null,
+        currentProvider: null,
+        currentSpeed: null,
+        employeeCount: null,
+        painPoints: null,
+        bestCallTime: null,
+        interested: false
+    };
 
-  // Remove the timestamp prefix from the text
-  const cleanText = text.replace(/\[Current time:[^\]]+\]\s*/, '');
-
-  // Improved regex patterns
-  const phoneRegex = /(?:\b|phone(?:\s+number)?(?:\s+is)?:?\s*)(\d{3}[-.]?\d{3}[-.]?\d{4})/i;
-  const nameRegex = /(?:(?:my|the|for|is|am|this is)\s+)?(?:name\s+(?:is\s+)?)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?:\b|$)/i;
-  const timeRegex = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
-
-  // Extract phone if present
-  const phoneMatch = cleanText.match(phoneRegex);
-  if (phoneMatch) {
-    context.phone = phoneMatch[1];
-    console.log('Found phone:', context.phone);
-  }
-
-  // Extract name if present
-  const nameMatch = cleanText.match(nameRegex);
-  if (nameMatch && nameMatch[1]) {
-    // Clean up and validate the name
-    const potentialName = nameMatch[1].trim();
-    if (potentialName.split(' ').length >= 2) { // Ensure it's at least first and last name
-      context.name = potentialName;
-      console.log('Found name:', context.name);
+    // Extract phone number
+    const phoneMatch = text.match(/(?:\b|phone(?:\s+number)?(?:\s+is)?:?\s*)(\d{3}[-.]?\d{3}[-.]?\d{4})/i);
+    if (phoneMatch) {
+        context.phone = phoneMatch[1];
     }
-  }
 
-  // Extract time
-  const timeMatch = cleanText.match(timeRegex);
-  if (timeMatch) {
-    const now = new Date();
-    const nextMonday = new Date();
-    nextMonday.setDate(now.getDate() + ((1 + 7 - now.getDay()) % 7));
-    
-    let hours = parseInt(timeMatch[1]);
-    const minutes = timeMatch[2] ? timeMatch[2] : "00";
-    const period = timeMatch[3].toLowerCase();
-    
-    if (period === "pm" && hours < 12) hours += 12;
-    if (period === "am" && hours === 12) hours = 0;
-    
-    // Validate business hours (9 AM to 6 PM)
-    const businessHours = hours >= 9 && hours <= 18;
-    
-    if (businessHours) {
-      const formattedHours = hours.toString().padStart(2, '0');
-      context.datetime = `Monday, January ${nextMonday.getDate()}, 2025 at ${formattedHours}:${minutes} ${period.toUpperCase()}`;
-      console.log('Found datetime:', context.datetime);
+    // Extract email
+    const emailMatch = text.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
+    if (emailMatch) {
+        context.email = emailMatch[0];
     }
-  }
 
-  // Extract purpose
-  const purposeMatch = cleanText.match(/(?:looking for|interested in|want to|would like to)\s+(?:a\s+)?([A-Za-z\s]+)(?:\s+car|\s+vehicle)?/i);
-  if (purposeMatch) {
-    context.purpose = purposeMatch[1];
-    console.log('Found purpose:', context.purpose);
-  }
+    // Extract business name
+    const businessMatch = text.match(/(?:company|business|organization)(?:\s+name)?(?:\s+is)?\s+([A-Za-z0-9\s&]+)(?:\.|,|\s|$)/i);
+    if (businessMatch) {
+        context.businessName = businessMatch[1].trim();
+    }
 
-  // Extract vehicle interest
-  const vehicleMatch = cleanText.match(/(?:looking for|interested in|want to|would like to)\s+(?:a\s+)?([A-Za-z\s]+)(?:\s+car|\s+vehicle)?/i);
-  if (vehicleMatch) {
-    context.vehicle = vehicleMatch[1];
-    console.log('Found vehicle interest:', context.vehicle);
-  }
+    // Extract employee count
+    const employeeMatch = text.match(/(\d+)\s+(?:employees|people|staff)/i);
+    if (employeeMatch) {
+        context.employeeCount = parseInt(employeeMatch[1]);
+    }
 
-  console.log('Current appointment context:', context);
-
-  // Save updated context
-  appointmentContext.set(userId, context);
-
-  // Return appointment details if we have all required information
-  if (context.name && context.datetime) {
-    // Clear context after successful appointment
-    appointmentContext.delete(userId);
+    // Update context
+    leadContext.set(userId, context);
     return context;
-  }
-
-  // Keep context for future messages if we don't have all required information
-  return null;
 };
 
 const chatCompletion = async (prompt, userId) => {
-  try {
-    // Get or initialize conversation history
-    let history = conversationHistory.get(userId) || [];
-    
-    // Add system message with business hours and 24/7 scheduling
-    const systemMessage = {
-      role: "system",
-      content: `You are Cindy Smith, a friendly and professional customer service representative for Car Source, located at 542 Wilkesboro Blvd, Lenoir NC 28645. Always introduce yourself as Cindy and maintain this identity throughout the conversation.
-
-      Business Hours:
-      - Monday to Saturday: 9:00 AM to 6:00 PM
-      - Sunday: Closed
-      
-      Your primary goal is to collect customer information 24/7 for appointments by gathering:
-      1. Customer's full name
-      2. Phone number
-      3. Preferred appointment time
-
-      Key Instructions:
-      - Always identify yourself as Cindy Smith when introducing yourself
-      - Be warm and personable in your interactions
-      - Always collect name first, then phone number, then appointment time
-      - If any information is missing, politely ask for it
-      - Verify the information once collected
-      - Current date/time is ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}
-      - Collect information 24/7, but inform customers that you will personally confirm their appointment during business hours
-      - When discussing appointment times, mention our business hours (Mon-Sat 9 AM - 6 PM)
-      - If customer requests a time outside business hours, politely suggest a time during business hours
-      - If customer provides information, acknowledge it and ask for the next piece
-      - Once all information is collected, confirm the details will be reviewed
-      
-      Example flow:
-      1. "Hi! I'm Cindy Smith from Car Source. I'd love to help you schedule a visit. Could you please share your full name?"
-      2. After getting name: "Thanks [name]! Could I get your phone number so I can confirm your appointment?"
-      3. After getting phone: "Perfect! What day and time would you prefer to visit us? Our business hours are Monday through Saturday, 9 AM to 6 PM."
-      4. After getting time: "Thank you! I've recorded your request to visit Car Source at [time]. I'll personally confirm your appointment during our business hours (Mon-Sat 9 AM - 6 PM). We look forward to helping you find your perfect vehicle!"
-
-      Always maintain a friendly and professional tone while collecting this information. Remember to assure customers that their information has been received and will be processed during business hours.
-      
-      If customers ask about visiting outside business hours:
-      - Politely inform them of our business hours
-      - Suggest alternative times during business hours
-      - Example: "While we're open Monday through Saturday from 9 AM to 6 PM, I'd be happy to schedule your visit during those hours. Would you prefer a different time during our business hours?"`
-    };
-
-    // Prepare messages array with system message and history
-    const messages = [
-      systemMessage,
-      ...history,
-      { role: "user", content: prompt }
-    ];
-
-    console.log('Sending request to OpenAI with messages:', JSON.stringify(messages));
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: messages,
-      temperature: 0.7,
-      max_tokens: 500
-    });
-
-    console.log('Received response from OpenAI:', JSON.stringify(completion));
-
-    // Validate the response structure
-    if (!completion || !completion.choices || !completion.choices[0] || !completion.choices[0].message) {
-      throw new Error('Invalid response structure from OpenAI');
-    }
-
-    // Get the response
-    const response = completion.choices[0].message.content;
-
-    if (typeof response !== 'string' || response.trim().length === 0) {
-      throw new Error('Empty or invalid response from OpenAI');
-    }
-
-    // Update conversation history
-    history.push({ role: "user", content: prompt });
-    history.push({ role: "assistant", content: response });
-
-    // Check for appointment details
     try {
-      const appointmentDetails = extractAppointmentDetails(prompt, userId);
-      if (appointmentDetails && appointmentDetails.name && appointmentDetails.phone && appointmentDetails.datetime) {
-        await logAppointment(appointmentDetails);
-      }
+        let history = conversationHistory.get(userId) || [];
+        
+        // Extract lead information from the prompt
+        const leadInfo = extractLeadInfo(prompt, userId);
+        
+        // Add system message and history
+        const messages = [
+            systemMessage,
+            ...history,
+            { role: "user", content: prompt }
+        ];
+
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4",
+            messages: messages,
+            temperature: 0.7,
+            max_tokens: 500
+        });
+
+        const response = completion.choices[0].message.content;
+
+        // Update conversation history
+        history.push({ role: "user", content: prompt });
+        history.push({ role: "assistant", content: response });
+
+        // Check if all required lead information is collected and customer is interested
+        const context = leadContext.get(userId);
+        if (context && context.businessName && context.contactName && context.phone && context.interested) {
+            // Log the lead
+            await logLead(context);
+            
+            // Send email notification to Brian
+            await sendLeadNotification(context);
+            
+            // Clear context after successful lead capture
+            leadContext.delete(userId);
+        }
+
+        // Limit history to last 10 messages
+        if (history.length > 10) {
+            history = history.slice(-10);
+        }
+
+        // Save updated history
+        conversationHistory.set(userId, history);
+
+        return response;
+
     } catch (error) {
-      console.error('Error processing appointment details:', error);
-      // Don't throw here, continue with the response
+        console.error('Error in chatCompletion:', error);
+        throw new Error('Failed to process your request. Please try again.');
     }
-
-    // Limit history to last 10 messages to prevent context overflow
-    if (history.length > 10) {
-      history = history.slice(-10);
-    }
-
-    // Save updated history
-    conversationHistory.set(userId, history);
-
-    return response;
-
-  } catch (error) {
-    console.error('Error in chatCompletion:', error);
-    if (error.response) {
-      console.error('OpenAI API error response:', error.response.data);
-    }
-    throw new Error('Failed to process your request. Please try again.');
-  }
 };
 
-// Function to clear conversation history for a user
+// Function to log lead information
+const logLead = async (leadInfo) => {
+    try {
+        const logDir = path.join(__dirname, '../logs');
+        const logFile = path.join(logDir, 'leads.log');
+        
+        if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir, { recursive: true });
+        }
+
+        const timestamp = new Date().toISOString();
+        const logEntry = `${timestamp} - New Business Internet Lead:\n` +
+                        `Business: ${leadInfo.businessName}\n` +
+                        `Contact: ${leadInfo.contactName}\n` +
+                        `Position: ${leadInfo.position}\n` +
+                        `Phone: ${leadInfo.phone}\n` +
+                        `Email: ${leadInfo.email}\n` +
+                        `Current Provider: ${leadInfo.currentProvider}\n` +
+                        `Employee Count: ${leadInfo.employeeCount}\n` +
+                        `Pain Points: ${leadInfo.painPoints}\n` +
+                        `Best Call Time: ${leadInfo.bestCallTime}\n` +
+                        '----------------------------------------\n';
+
+        fs.appendFileSync(logFile, logEntry);
+
+        // Also save to leads.csv
+        const leadsFile = path.join(__dirname, '../leads-3.csv');
+        const leadEntry = `${timestamp},"${leadInfo.businessName}","${leadInfo.contactName}","${leadInfo.email}","${leadInfo.phone}","${leadInfo.currentProvider}","${leadInfo.employeeCount}","New Lead"\n`;
+        fs.appendFileSync(leadsFile, leadEntry);
+
+    } catch (error) {
+        console.error('Error logging lead:', error);
+    }
+};
+
+// Function to send lead notification email
+const sendLeadNotification = async (leadInfo) => {
+    try {
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: 'brian@example.com', // Replace with Brian's email
+            subject: `New Business Internet Lead - ${leadInfo.businessName}`,
+            text: `New lead requires immediate follow-up:
+
+Business Name: ${leadInfo.businessName}
+Contact: ${leadInfo.contactName}
+Position: ${leadInfo.position}
+Phone: ${leadInfo.phone}
+Email: ${leadInfo.email}
+Current Provider: ${leadInfo.currentProvider}
+Employee Count: ${leadInfo.employeeCount}
+Pain Points: ${leadInfo.painPoints}
+Best Time to Call: ${leadInfo.bestCallTime}
+
+Please follow up with this lead as soon as possible.`,
+        };
+
+        await transporter.sendMail(mailOptions);
+    } catch (error) {
+        console.error('Error sending lead notification:', error);
+    }
+};
+
+// Function to clear conversation for a user
 const clearConversation = (userId) => {
-  conversationHistory.delete(userId);
-  appointmentContext.delete(userId);
+    conversationHistory.delete(userId);
+    leadContext.delete(userId);
 };
+
+// Function to analyze customer requirements and provide recommendations
+async function analyzeRequirements(businessDetails) {
+    try {
+        const completion = await openai.createChatCompletion({
+            model: "gpt-4",
+            messages: [
+                systemMessage,
+                {
+                    role: "user",
+                    content: `Please analyze these business requirements and provide recommendations:
+                    Business Name: ${businessDetails.businessName}
+                    Current Speed: ${businessDetails.currentSpeed}
+                    Desired Speed: ${businessDetails.desiredSpeed}
+                    Employee Count: ${businessDetails.employeeCount}
+                    Monthly Budget: $${businessDetails.monthlyBudget}
+                    Special Requirements: ${businessDetails.specialRequirements}
+                    Site Type: ${businessDetails.siteType}`
+                }
+            ],
+            temperature: 0.7,
+            max_tokens: 500
+        });
+
+        return completion.data.choices[0].message.content;
+    } catch (error) {
+        console.error('Error analyzing requirements:', error);
+        throw error;
+    }
+}
+
+// Function to generate a customized service proposal
+async function generateProposal(lead) {
+    try {
+        const completion = await openai.createChatCompletion({
+            model: "gpt-4",
+            messages: [
+                systemMessage,
+                {
+                    role: "user",
+                    content: `Please generate a professional service proposal for:
+                    Business: ${lead.businessName}
+                    Current Provider: ${lead.currentProvider}
+                    Current Speed: ${lead.currentSpeed}
+                    Desired Speed: ${lead.desiredSpeed}
+                    Monthly Budget: $${lead.monthlyBudget}
+                    Employee Count: ${lead.employeeCount}
+                    Special Requirements: ${lead.specialRequirements}
+                    Site Type: ${lead.siteType}
+                    Contract Length: ${lead.contractLength}
+                    
+                    Include:
+                    1. Executive Summary
+                    2. Recommended Package
+                    3. Technical Specifications
+                    4. Implementation Timeline
+                    5. Investment Overview
+                    6. Service Level Agreement Highlights`
+                }
+            ],
+            temperature: 0.7,
+            max_tokens: 1000
+        });
+
+        return completion.data.choices[0].message.content;
+    } catch (error) {
+        console.error('Error generating proposal:', error);
+        throw error;
+    }
+}
+
+// Function to suggest follow-up questions based on lead information
+async function suggestFollowUpQuestions(leadInfo) {
+    try {
+        const completion = await openai.createChatCompletion({
+            model: "gpt-4",
+            messages: [
+                systemMessage,
+                {
+                    role: "user",
+                    content: `Based on this lead information, suggest relevant follow-up questions:
+                    Business Name: ${leadInfo.businessName}
+                    Current Speed: ${leadInfo.currentSpeed}
+                    Desired Speed: ${leadInfo.desiredSpeed}
+                    Special Requirements: ${leadInfo.specialRequirements}
+                    Stage: ${leadInfo.stage}
+                    
+                    Focus on:
+                    1. Technical requirements
+                    2. Business growth plans
+                    3. Current pain points
+                    4. Budget considerations
+                    5. Timeline expectations`
+                }
+            ],
+            temperature: 0.7,
+            max_tokens: 350
+        });
+
+        return completion.data.choices[0].message.content;
+    } catch (error) {
+        console.error('Error generating follow-up questions:', error);
+        throw error;
+    }
+}
+
+// Function to provide technical explanations in business-friendly terms
+async function explainTechnicalConcepts(concept) {
+    try {
+        const completion = await openai.createChatCompletion({
+            model: "gpt-4",
+            messages: [
+                systemMessage,
+                {
+                    role: "user",
+                    content: `Please explain this technical concept in business-friendly terms: ${concept}
+                    
+                    Include:
+                    1. Simple explanation
+                    2. Business benefits
+                    3. Real-world example
+                    4. Why it matters for their operations`
+                }
+            ],
+            temperature: 0.7,
+            max_tokens: 300
+        });
+
+        return completion.data.choices[0].message.content;
+    } catch (error) {
+        console.error('Error explaining technical concept:', error);
+        throw error;
+    }
+}
 
 module.exports = {
-  chatCompletion,
-  clearConversation
+    chatCompletion,
+    clearConversation,
+    analyzeRequirements,
+    generateProposal,
+    suggestFollowUpQuestions,
+    explainTechnicalConcepts
 };
