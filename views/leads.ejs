@@ -349,8 +349,8 @@
                     <i class="fas fa-file-upload"></i>
                     Upload CSV
                 </button>
-                <form id="csvUploadForm" style="display: none;">
-                    <input type="file" id="csvFileInput" accept=".csv" onchange="handleFileUpload(this)">
+                <form id="csvUploadForm" action="/leads/upload" method="post" enctype="multipart/form-data" style="display: none;">
+                    <input type="file" id="csvFileInput" name="csvFile" accept=".csv" onchange="handleFileUpload(this)">
                 </form>
             </div>
             <!-- Previous table content remains the same -->
@@ -488,36 +488,23 @@
                     return;
                 }
 
-                const formData = new FormData();
-                formData.append('file', file);
-
+                const formData = new FormData(document.getElementById('csvUploadForm'));
+                
                 // Show loading state
                 const uploadButton = input.parentElement.previousElementSibling;
                 const originalContent = uploadButton.innerHTML;
                 uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
                 uploadButton.disabled = true;
 
-                fetch('/upload-leads', {
+                fetch('/leads/upload', {
                     method: 'POST',
                     body: formData
                 })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Show success message
-                        const messageDiv = document.createElement('div');
-                        messageDiv.className = 'message';
-                        messageDiv.style.display = 'block';
-                        messageDiv.innerHTML = `Successfully uploaded ${data.count} leads`;
-                        document.querySelector('.container').insertBefore(messageDiv, document.querySelector('.dashboard'));
-                        
-                        // Refresh the page after 2 seconds
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 2000);
-                    } else {
-                        throw new Error(data.message || 'Upload failed');
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Upload failed');
                     }
+                    window.location.href = '/leads?message=Leads imported successfully';
                 })
                 .catch(error => {
                     alert('Error uploading file: ' + error.message);
