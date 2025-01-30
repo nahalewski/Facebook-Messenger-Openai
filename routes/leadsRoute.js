@@ -17,6 +17,53 @@ let pipelines = [{
     stages: ['New', 'Qualified', 'Contacted', 'Negotiation', 'Closed Won', 'Closed Lost']
 }];
 
+// Load initial leads from CSV
+function loadInitialLeads() {
+    const results = [];
+    fs.createReadStream(path.join(__dirname, '../leads-3.csv'))
+        .pipe(csv())
+        .on('data', (data) => {
+            // Parse the date from the Created field
+            const createdDate = new Date(data.Created);
+            
+            // Parse labels into an array
+            const tags = data.Labels ? data.Labels.split(',').map(tag => tag.trim()) : [];
+            
+            const lead = {
+                id: Date.now().toString() + results.length,
+                time: createdDate.toISOString(),
+                name: data.Name || 'Unknown',
+                email: data.Email || '',
+                phone: data.Phone || '',
+                secondaryPhone: data['Secondary Phone Number'] || '',
+                source: data.Source || '',
+                form: data.Form || '',
+                channel: data.Channel || '',
+                stage: data.Stage || 'New',
+                owner: data.Owner || 'Unassigned',
+                tags: tags,
+                value: 0, // You can add logic to calculate value based on other fields
+                nextFollowUp: null
+            };
+            results.push(lead);
+            
+            // Add activity for lead creation
+            activities.push({
+                type: 'Lead Created',
+                description: `New lead created: ${lead.name}`,
+                time: lead.time,
+                leadId: lead.id
+            });
+        })
+        .on('end', () => {
+            leads = results;
+            console.log(`Loaded ${leads.length} leads from leads-3.csv`);
+        });
+}
+
+// Load initial leads when the server starts
+loadInitialLeads();
+
 // Helper functions
 function calculateMetrics() {
     const now = new Date();
@@ -36,8 +83,8 @@ function calculateMetrics() {
             return dueDate >= now && dueDate <= new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
         }),
         recentActivities: activities
-            .filter(a => new Date(a.timestamp) >= oneWeekAgo)
-            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+            .filter(a => new Date(a.time) >= oneWeekAgo)
+            .sort((a, b) => new Date(b.time) - new Date(a.time))
             .slice(0, 20)
     };
 }
@@ -73,7 +120,7 @@ function logActivity(type, description, leadId = null, userId = null) {
         description,
         leadId,
         userId,
-        timestamp: new Date().toISOString()
+        time: new Date().toISOString()
     };
     activities.push(activity);
     return activity;

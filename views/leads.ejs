@@ -316,24 +316,35 @@
                             </span>
                         </div>
                         <% leads.filter(l => l.stage === stage).forEach(function(lead) { %>
-                            <div class="pipeline-card" onclick="showLeadDetails('<%= lead.id %>')">
-                                <h4><%= lead.name %></h4>
+                            <div class="pipeline-card">
+                                <div class="pipeline-card-header">
+                                    <h3><%= lead.name %></h3>
+                                    <div class="lead-meta">
+                                        <% if (lead.email) { %>
+                                            <div><i class="fas fa-envelope"></i> <%= lead.email %></div>
+                                        <% } %>
+                                        <% if (lead.phone) { %>
+                                            <div><i class="fas fa-phone"></i> <%= lead.phone %></div>
+                                        <% } %>
+                                        <% if (lead.source) { %>
+                                            <div><i class="fas fa-tag"></i> <%= lead.source %> / <%= lead.channel %></div>
+                                        <% } %>
+                                    </div>
+                                </div>
                                 <div class="pipeline-card-meta">
                                     <div>
-                                        <i class="fas fa-dollar-sign"></i>
-                                        <span class="value-indicator <%= (lead.value || 0) > 10000 ? 'high' : (lead.value || 0) > 5000 ? 'medium' : 'low' %>">
-                                            <%= (lead.value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' }) %>
-                                        </span>
+                                        <i class="fas fa-user"></i>
+                                        <span><%= lead.owner %></span>
                                     </div>
                                     <div>
-                                        <i class="fas fa-building"></i> <%= lead.company %>
+                                        <i class="fas fa-clock"></i>
+                                        <span><%= new Date(lead.time).toLocaleDateString() %></span>
                                     </div>
-                                    <% if (lead.nextFollowUp) { %>
-                                        <div>
-                                            <i class="fas fa-calendar"></i>
-                                            Next Follow-up: <%= new Date(lead.nextFollowUp).toLocaleDateString() %>
-                                        </div>
-                                    <% } %>
+                                </div>
+                                <div class="pipeline-card-tags">
+                                    <% lead.tags.forEach(function(tag) { %>
+                                        <span class="tag"><%= tag %></span>
+                                    <% }); %>
                                 </div>
                             </div>
                         <% }); %>
