@@ -290,4 +290,6 @@ router.post('/upload', upload.single('csvFile'), (req, res) => {
     }
 });
 
-module.exports = router;
+module.exports = {
+    router
+};
