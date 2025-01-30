@@ -17,11 +17,10 @@ let pipelines = [{
     stages: ['New', 'Qualified', 'Contacted', 'Negotiation', 'Closed Won', 'Closed Lost']
 }];
 
-// Setup multer for CSV uploads
+// Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         const uploadDir = path.join(__dirname, '../uploads');
-        // Create uploads directory if it doesn't exist
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
@@ -41,6 +40,95 @@ const upload = multer({
         cb(null, true);
     }
 });
+
+// Load initial leads from CSV
+async function loadInitialLeads() {
+    const csvPath = path.join(__dirname, '..', 'leads-3.csv');
+    
+    if (!fs.existsSync(csvPath)) {
+        console.log('No initial leads file found');
+        return [];
+    }
+
+    return new Promise((resolve, reject) => {
+        const results = [];
+        fs.createReadStream(csvPath)
+            .pipe(csv())
+            .on('data', (data) => {
+                const lead = {
+                    id: Date.now().toString() + results.length,
+                    time: new Date().toISOString(),
+                    name: data.Name || 'Unknown',
+                    email: data.Email || '',
+                    phone: data.Phone || '',
+                    secondaryPhone: data['Secondary Phone Number'] || '',
+                    source: data.Source || '',
+                    form: data.Form || '',
+                    channel: data.Channel || '',
+                    stage: data.Stage || 'New',
+                    owner: data.Owner || 'Unassigned',
+                    tags: data.Tags ? data.Tags.split(',').map(tag => tag.trim()) : [],
+                    value: 0,
+                    nextFollowUp: null
+                };
+                results.push(lead);
+            })
+            .on('end', () => {
+                resolve(results);
+            })
+            .on('error', (error) => {
+                reject(error);
+            });
+    });
+}
+
+// Initialize leads from CSV when the server starts
+loadInitialLeads()
+    .then(initialLeads => {
+        leads = initialLeads;
+        console.log(`Loaded ${leads.length} leads from CSV`);
+    })
+    .catch(error => {
+        console.error('Error loading initial leads:', error);
+    });
+
+// Helper function to parse CSV data
+function parseCSV(file) {
+    return new Promise((resolve, reject) => {
+        const results = [];
+        fs.createReadStream(file.path)
+            .pipe(csv())
+            .on('data', (data) => {
+                const lead = {
+                    id: Date.now().toString() + results.length,
+                    time: new Date().toISOString(),
+                    name: data.Name || 'Unknown',
+                    email: data.Email || '',
+                    phone: data.Phone || '',
+                    secondaryPhone: data['Secondary Phone Number'] || '',
+                    source: data.Source || '',
+                    form: data.Form || '',
+                    channel: data.Channel || '',
+                    stage: data.Stage || 'New',
+                    owner: data.Owner || 'Unassigned',
+                    tags: data.Tags ? data.Tags.split(',').map(tag => tag.trim()) : [],
+                    value: 0,
+                    nextFollowUp: null
+                };
+                results.push(lead);
+            })
+            .on('end', () => {
+                // Clean up the uploaded file
+                fs.unlink(file.path, (err) => {
+                    if (err) console.error('Error deleting uploaded file:', err);
+                });
+                resolve(results);
+            })
+            .on('error', (error) => {
+                reject(error);
+            });
+    });
+}
 
 // Helper functions
 function calculateMetrics() {
@@ -378,6 +466,69 @@ router.post('/upload', upload.single('csvFile'), (req, res) => {
             fs.unlink(req.file.path, () => {});
         }
         res.status(500).json({ error: error.message || 'Error uploading CSV' });
+    }
+});
+
+// Import leads from CSV
+router.post('/import', upload.single('csvFile'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        const results = [];
+        await new Promise((resolve, reject) => {
+            fs.createReadStream(req.file.path)
+                .pipe(csv())
+                .on('data', (data) => {
+                    const lead = {
+                        id: Date.now().toString() + results.length,
+                        time: new Date().toISOString(),
+                        name: data.Name || 'Unknown',
+                        email: data.Email || '',
+                        phone: data.Phone || '',
+                        secondaryPhone: data['Secondary Phone Number'] || '',
+                        source: data.Source || '',
+                        form: data.Form || '',
+                        channel: data.Channel || '',
+                        stage: data.Stage || 'New',
+                        owner: data.Owner || 'Unassigned',
+                        tags: data.Tags ? data.Tags.split(',').map(tag => tag.trim()) : [],
+                        value: 0,
+                        nextFollowUp: null
+                    };
+                    results.push(lead);
+                })
+                .on('end', resolve)
+                .on('error', reject);
+        });
+
+        // Clean up uploaded file
+        fs.unlink(req.file.path, (err) => {
+            if (err) console.error('Error deleting uploaded file:', err);
+        });
+
+        // Add imported leads
+        leads.push(...results);
+        
+        // Log activity
+        const activity = logActivity(
+            'Leads Imported',
+            `Imported ${results.length} leads from CSV`,
+            null
+        );
+        
+        res.json({ 
+            success: true, 
+            count: results.length,
+            activity 
+        });
+    } catch (error) {
+        console.error('Error importing leads:', error);
+        if (req.file) {
+            fs.unlink(req.file.path, () => {});
+        }
+        res.status(500).json({ error: 'Error importing leads' });
     }
 });
 
