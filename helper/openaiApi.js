@@ -127,7 +127,7 @@ const sendChatLogEmail = async (userId, leadInfo) => {
         
         const mailOptions = {
             from: process.env.EMAIL_USER,
-            to: 'brian@example.com', // Replace with Brian's email
+            to: 'japansmostwanted@gmail.com', // Replace with Brian's email
             subject: `Chat Log & Lead Information - ${leadInfo.businessName}`,
             text: `New Lead from Business Internet Chat:
 
