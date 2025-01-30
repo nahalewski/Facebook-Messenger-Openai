@@ -5,18 +5,6 @@ const csv = require('csv-parser');
 const fs = require('fs');
 const path = require('path');
 
-// Initialize empty arrays for leads and activities
-let leads = [];
-let activities = [];
-let tasks = [];
-let tags = [];
-let reminders = [];
-let pipelines = [{
-    id: 'main',
-    name: 'Main Pipeline',
-    stages: ['New', 'Qualified', 'Contacted', 'Negotiation', 'Closed Won', 'Closed Lost']
-}];
-
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -40,6 +28,21 @@ const upload = multer({
         cb(null, true);
     }
 });
+
+// In-memory storage
+let leads = [];
+let activities = [];
+let tasks = [];
+let tags = [];
+let reminders = [];
+let pipelines = [{
+    id: 'main',
+    name: 'Main Pipeline',
+    stages: ['New', 'Qualified', 'Contacted', 'Negotiation', 'Closed Won', 'Closed Lost']
+}];
+
+// Pipeline stages
+const STAGES = ['New', 'Qualified', 'Contacted', 'Negotiation', 'Closed Won', 'Closed Lost'];
 
 // Load initial leads from CSV
 async function loadInitialLeads() {
@@ -65,7 +68,7 @@ async function loadInitialLeads() {
                     source: data.Source || '',
                     form: data.Form || '',
                     channel: data.Channel || '',
-                    stage: data.Stage || 'New',
+                    stage: STAGES.includes(data.Stage) ? data.Stage : 'New',
                     owner: data.Owner || 'Unassigned',
                     tags: data.Tags ? data.Tags.split(',').map(tag => tag.trim()) : [],
                     value: 0,
@@ -82,15 +85,40 @@ async function loadInitialLeads() {
     });
 }
 
-// Initialize leads from CSV when the server starts
-loadInitialLeads()
-    .then(initialLeads => {
-        leads = initialLeads;
+// Initialize leads from CSV
+(async () => {
+    try {
+        leads = await loadInitialLeads();
         console.log(`Loaded ${leads.length} leads from CSV`);
-    })
-    .catch(error => {
+        
+        // Ensure each lead has a valid stage
+        leads = leads.map(lead => ({
+            ...lead,
+            stage: STAGES.includes(lead.stage) ? lead.stage : 'New'
+        }));
+    } catch (error) {
         console.error('Error loading initial leads:', error);
-    });
+    }
+})();
+
+// Helper function to generate unique IDs
+function generateId() {
+    return 'lead_' + Math.random().toString(36).substr(2, 9);
+}
+
+// Helper function to log activities
+function logActivity(type, description, leadId) {
+    const activity = {
+        id: Math.random().toString(36).substr(2, 9),
+        type,
+        description,
+        leadId,
+        timestamp: new Date().toISOString()
+    };
+    
+    activities.push(activity);
+    return activity;
+}
 
 // Helper function to parse CSV data
 function parseCSV(file) {
@@ -109,7 +137,7 @@ function parseCSV(file) {
                     source: data.Source || '',
                     form: data.Form || '',
                     channel: data.Channel || '',
-                    stage: data.Stage || 'New',
+                    stage: STAGES.includes(data.Stage) ? data.Stage : 'New',
                     owner: data.Owner || 'Unassigned',
                     tags: data.Tags ? data.Tags.split(',').map(tag => tag.trim()) : [],
                     value: 0,
@@ -179,24 +207,6 @@ function calculateLeadsByStage() {
     }, {});
 }
 
-function logActivity(type, description, leadId = null, userId = null) {
-    const activity = {
-        id: Date.now().toString(),
-        type,
-        description,
-        leadId,
-        userId,
-        time: new Date().toISOString()
-    };
-    activities.push(activity);
-    return activity;
-}
-
-// Helper function to generate unique IDs
-function generateId() {
-    return 'lead_' + Math.random().toString(36).substr(2, 9);
-}
-
 // Routes
 router.get('/', async (req, res) => {
     try {
@@ -226,6 +236,7 @@ router.get('/', async (req, res) => {
             activities: activities.slice(0, 20),
             metrics,
             pipelines,
+            stages: STAGES,
             getActivityIcon,
             message: req.query.message
         });
@@ -421,7 +432,7 @@ router.post('/upload', upload.single('csvFile'), (req, res) => {
                     source: data.Source || '',
                     form: data.Form || '',
                     channel: data.Channel || '',
-                    stage: data.Stage || 'New',
+                    stage: STAGES.includes(data.Stage) ? data.Stage : 'New',
                     owner: data.Owner || 'Unassigned',
                     tags: tags,
                     value: 0,
@@ -491,7 +502,7 @@ router.post('/import', upload.single('csvFile'), async (req, res) => {
                         source: data.Source || '',
                         form: data.Form || '',
                         channel: data.Channel || '',
-                        stage: data.Stage || 'New',
+                        stage: STAGES.includes(data.Stage) ? data.Stage : 'New',
                         owner: data.Owner || 'Unassigned',
                         tags: data.Tags ? data.Tags.split(',').map(tag => tag.trim()) : [],
                         value: 0,

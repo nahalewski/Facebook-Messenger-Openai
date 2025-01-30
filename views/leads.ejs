@@ -395,35 +395,55 @@
 
         <!-- Pipeline View -->
         <div class="pipeline">
-            <% ['New', 'Qualified', 'Contacted', 'Negotiation', 'Closed Won', 'Closed Lost'].forEach(function(stage) { %>
+            <% stages.forEach(function(stage) { %>
                 <div class="pipeline-stage">
                     <div class="stage-header">
-                        <span class="stage-name"><%= stage %></span>
-                        <span class="stage-count"><%= leads.filter(l => l.stage === stage).length %></span>
+                        <h3><%= stage %></h3>
+                        <span class="lead-count"><%= leads.filter(lead => lead.stage === stage).length %></span>
                     </div>
-                    <% leads.filter(l => l.stage === stage).forEach(function(lead) { %>
-                        <div class="pipeline-card" onclick="showLeadDetails('<%= JSON.stringify(lead).replace(/'/g, "\\'") %>')">
-                            <h3><%= lead.name %></h3>
-                            <div class="lead-meta">
-                                <div><i class="fas fa-building"></i> <%= lead.company %></div>
-                                <div><i class="fas fa-envelope"></i> <%= lead.email %></div>
-                                <div><i class="fas fa-phone"></i> <%= lead.phone %></div>
-                                <% if (lead.value) { %>
-                                    <div><i class="fas fa-dollar-sign"></i> $<%= lead.value.toLocaleString() %></div>
-                                <% } %>
-                                <% if (lead.nextFollowUp) { %>
-                                    <div><i class="fas fa-calendar"></i> Follow-up: <%= new Date(lead.nextFollowUp).toLocaleDateString() %></div>
-                                <% } %>
-                            </div>
-                            <% if (lead.tags && lead.tags.length > 0) { %>
-                                <div class="pipeline-card-tags">
-                                    <% lead.tags.forEach(function(tag) { %>
-                                        <span class="tag"><%= tag %></span>
-                                    <% }); %>
+                    <div class="stage-content">
+                        <% leads.filter(lead => lead.stage === stage).forEach(function(lead) { %>
+                            <div class="lead-card" data-lead-id="<%= lead.id %>">
+                                <div class="lead-card-header">
+                                    <h4><%= lead.name %></h4>
+                                    <% if (lead.company) { %>
+                                        <p class="company"><%= lead.company %></p>
+                                    <% } %>
                                 </div>
-                            <% } %>
-                        </div>
-                    <% }); %>
+                                <div class="lead-card-body">
+                                    <% if (lead.email) { %>
+                                        <p><i class="fas fa-envelope"></i> <%= lead.email %></p>
+                                    <% } %>
+                                    <% if (lead.phone) { %>
+                                        <p><i class="fas fa-phone"></i> <%= lead.phone %></p>
+                                    <% } %>
+                                    <% if (lead.value > 0) { %>
+                                        <p class="deal-value">$<%= lead.value.toLocaleString() %></p>
+                                    <% } %>
+                                </div>
+                                <% if (lead.tags && lead.tags.length > 0) { %>
+                                    <div class="lead-tags">
+                                        <% lead.tags.forEach(function(tag) { %>
+                                            <span class="tag"><%= tag %></span>
+                                        <% }); %>
+                                    </div>
+                                <% } %>
+                                <div class="lead-card-footer">
+                                    <% if (lead.nextFollowUp) { %>
+                                        <span class="follow-up">
+                                            <i class="fas fa-calendar"></i>
+                                            <%= new Date(lead.nextFollowUp).toLocaleDateString() %>
+                                        </span>
+                                    <% } %>
+                                    <div class="lead-actions">
+                                        <button class="button small" onclick="showLeadDetails('<%= lead.id %>')">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        <% }); %>
+                    </div>
                 </div>
             <% }); %>
         </div>
