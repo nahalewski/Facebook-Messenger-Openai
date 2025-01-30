@@ -243,7 +243,9 @@ router.post('/:id/followup', (req, res) => {
             leadId
         );
 
-        res.json({ success: true });
+        res.json({ 
+            success: true 
+        });
     } catch (error) {
         console.error('Error scheduling follow-up:', error);
         res.status(500).send('Error scheduling follow-up');
@@ -251,12 +253,34 @@ router.post('/:id/followup', (req, res) => {
 });
 
 // CSV Upload handling
-const upload = multer({ dest: 'uploads/' });
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadDir = path.join(__dirname, '../uploads');
+        // Create uploads directory if it doesn't exist
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        cb(null, 'leads-' + Date.now() + '.csv');
+    }
+});
+
+const upload = multer({ 
+    storage: storage,
+    fileFilter: function (req, file, cb) {
+        if (!file.originalname.toLowerCase().endsWith('.csv')) {
+            return cb(new Error('Only CSV files are allowed'));
+        }
+        cb(null, true);
+    }
+});
 
 router.post('/upload', upload.single('csvFile'), (req, res) => {
     try {
         if (!req.file) {
-            return res.status(400).send('No file uploaded');
+            return res.status(400).json({ error: 'No file uploaded' });
         }
 
         const results = [];
@@ -271,6 +295,11 @@ router.post('/upload', upload.single('csvFile'), (req, res) => {
                 };
                 results.push(lead);
             })
+            .on('error', (error) => {
+                console.error('Error parsing CSV:', error);
+                fs.unlink(req.file.path, () => {});
+                res.status(500).json({ error: 'Error parsing CSV file' });
+            })
             .on('end', () => {
                 leads.push(...results);
                 
@@ -282,11 +311,18 @@ router.post('/upload', upload.single('csvFile'), (req, res) => {
                     if (err) console.error('Error deleting uploaded file:', err);
                 });
 
-                res.redirect('/leads?message=Leads imported successfully');
+                res.json({ 
+                    success: true, 
+                    message: 'Leads imported successfully',
+                    count: results.length 
+                });
             });
     } catch (error) {
         console.error('Error uploading CSV:', error);
-        res.status(500).send('Error uploading CSV');
+        if (req.file) {
+            fs.unlink(req.file.path, () => {});
+        }
+        res.status(500).json({ error: error.message || 'Error uploading CSV' });
     }
 });
 
