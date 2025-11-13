@@ -1,4 +1,3 @@
-const { OpenAI } = require("openai");
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
@@ -6,9 +5,96 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 require('dotenv').config();
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+const openaiApiKey = process.env.OPENAI_API_KEY;
+let openaiClient = null;
+if (openaiApiKey) {
+    try {
+        const { OpenAI } = require("openai");
+        openaiClient = new OpenAI({ apiKey: openaiApiKey });
+    } catch (error) {
+        console.warn('Failed to initialize OpenAI client:', error.message);
+    }
+} else {
+    console.warn('OPENAI_API_KEY not set. Falling back to LM Studio if configured.');
+}
+
+const LM_STUDIO_URL = process.env.LM_STUDIO_URL;
+const DEFAULT_MODEL = process.env.LLM_MODEL || 'gpt-4';
+
+const callChatCompletion = async ({ messages, model, temperature, max_tokens, top_p, frequency_penalty, presence_penalty }) => {
+    if (!Array.isArray(messages) || messages.length === 0) {
+        throw new Error('Messages array is required for chat completion.');
+    }
+
+    const options = {
+        model: model || DEFAULT_MODEL,
+        temperature,
+        max_tokens,
+        top_p,
+        frequency_penalty,
+        presence_penalty
+    };
+
+    if (LM_STUDIO_URL) {
+        try {
+            const payload = {
+                messages,
+                temperature: temperature ?? 0.7,
+                max_tokens: max_tokens ?? 500,
+                top_p: top_p ?? 0.9,
+                stream: false
+            };
+
+            if (frequency_penalty !== undefined) payload.frequency_penalty = frequency_penalty;
+            if (presence_penalty !== undefined) payload.presence_penalty = presence_penalty;
+            if (options.model) payload.model = options.model;
+
+            const { data } = await axios.post(LM_STUDIO_URL, payload, {
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 60000
+            });
+
+            const choices = data?.choices || [];
+            const message = choices[0]?.message?.content || choices[0]?.text || '';
+
+            return {
+                content: message,
+                raw: data
+            };
+        } catch (error) {
+            console.error('Error calling LM Studio:', error.message);
+            throw error;
+        }
+    }
+
+    if (openaiClient) {
+        const payload = {
+            messages,
+            ...options,
+        };
+
+        if (openaiClient.chat?.completions?.create) {
+            const response = await openaiClient.chat.completions.create(payload);
+            const message = response?.choices?.[0]?.message?.content || '';
+            return {
+                content: message,
+                raw: response
+            };
+        }
+
+        if (typeof openaiClient.createChatCompletion === 'function') {
+            const response = await openaiClient.createChatCompletion(payload);
+            const choices = response?.data?.choices || response?.choices || [];
+            const message = choices[0]?.message?.content || '';
+            return {
+                content: message,
+                raw: response
+            };
+        }
+    }
+
+    throw new Error('No language model configured. Set LM_STUDIO_URL or OPENAI_API_KEY.');
+};
 
 // Configure nodemailer with Gmail
 const transporter = nodemailer.createTransport({
@@ -225,14 +311,11 @@ const chatCompletion = async (prompt, userId) => {
             { role: "user", content: prompt }
         ];
 
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4",
-            messages: messages,
+        const { content: response } = await callChatCompletion({
+            messages,
             temperature: 0.7,
             max_tokens: 500
         });
-
-        const response = completion.choices[0].message.content;
 
         // Update conversation history
         history.push({ role: "user", content: prompt });
@@ -339,8 +422,7 @@ const clearConversation = (userId) => {
 // Function to analyze customer requirements and provide recommendations
 async function analyzeRequirements(businessDetails) {
     try {
-        const completion = await openai.createChatCompletion({
-            model: "gpt-4",
+        const { content } = await callChatCompletion({
             messages: [
                 systemMessage,
                 {
@@ -359,7 +441,7 @@ async function analyzeRequirements(businessDetails) {
             max_tokens: 500
         });
 
-        return completion.data.choices[0].message.content;
+        return content;
     } catch (error) {
         console.error('Error analyzing requirements:', error);
         throw error;
@@ -369,8 +451,7 @@ async function analyzeRequirements(businessDetails) {
 // Function to generate a customized service proposal
 async function generateProposal(lead) {
     try {
-        const completion = await openai.createChatCompletion({
-            model: "gpt-4",
+        const { content } = await callChatCompletion({
             messages: [
                 systemMessage,
                 {
@@ -399,7 +480,7 @@ async function generateProposal(lead) {
             max_tokens: 1000
         });
 
-        return completion.data.choices[0].message.content;
+        return content;
     } catch (error) {
         console.error('Error generating proposal:', error);
         throw error;
@@ -409,8 +490,7 @@ async function generateProposal(lead) {
 // Function to suggest follow-up questions based on lead information
 async function suggestFollowUpQuestions(leadInfo) {
     try {
-        const completion = await openai.createChatCompletion({
-            model: "gpt-4",
+        const { content } = await callChatCompletion({
             messages: [
                 systemMessage,
                 {
@@ -434,7 +514,7 @@ async function suggestFollowUpQuestions(leadInfo) {
             max_tokens: 350
         });
 
-        return completion.data.choices[0].message.content;
+        return content;
     } catch (error) {
         console.error('Error generating follow-up questions:', error);
         throw error;
@@ -444,8 +524,7 @@ async function suggestFollowUpQuestions(leadInfo) {
 // Function to provide technical explanations in business-friendly terms
 async function explainTechnicalConcepts(concept) {
     try {
-        const completion = await openai.createChatCompletion({
-            model: "gpt-4",
+        const { content } = await callChatCompletion({
             messages: [
                 systemMessage,
                 {
@@ -463,7 +542,7 @@ async function explainTechnicalConcepts(concept) {
             max_tokens: 300
         });
 
-        return completion.data.choices[0].message.content;
+        return content;
     } catch (error) {
         console.error('Error explaining technical concept:', error);
         throw error;
