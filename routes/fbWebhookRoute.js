@@ -24,16 +24,10 @@ router.get('/', (req, res) => {
   }
 });
 
-const callSendMessage = async (senderId, query) => {
-  console.log('Attempting to send message to AI:', { senderId, query });
+const callSendMessage = async (url, senderId, query) => {
+  console.log('Attempting to send message to AI:', { url, senderId, query });
   
   try {
-    // Get the base URL from the environment or use a default
-    const baseUrl = process.env.BASE_URL || 'http://localhost:10000';
-    const url = `${baseUrl}/sendMessage`;
-    
-    console.log('Making request to:', url);
-    
     const options = {
       method: 'POST',
       url: url,
@@ -94,8 +88,13 @@ router.post('/', async (req, res) => {
         // Only process if we have both sender ID and message text
         if (senderId && query) {
           console.log(`Processing message from ${senderId}: ${query}`);
+          
+          const baseUrl = (process.env.BASE_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host') || ''}`).replace(/\/$/, '');
+          const requestUrl = `${baseUrl}/sendMessage`;
+          console.log('Resolved sendMessage URL:', requestUrl);
+          
           try {
-            await callSendMessage(senderId, query);
+            await callSendMessage(requestUrl, senderId, query);
             console.log('Message processed successfully');
           } catch (error) {
             console.error('Failed to process message:', error);
